@@ -4,17 +4,26 @@ server:
 spring:
   application:
     name: order-service
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/spicyeat_order}
     username: ${DB_USERNAME:spicyeat}
     password: ${DB_PASSWORD:spicyeat}
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate:
+        default_schema: ${DB_SCHEMA:spicyeat_order}
+
   flyway:
     enabled: true
     locations: classpath:db/migration
+    default-schema: ${DB_SCHEMA:spicyeat_order}
+    schemas: ${DB_SCHEMA:spicyeat_order}
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -31,6 +40,7 @@ spicyeat:
     cart-uri: ${CART_SERVICE_URI:http://localhost:8084}
     menu-uri: ${MENU_SERVICE_URI:http://localhost:8083}
     user-uri: ${USER_SERVICE_URI:http://localhost:8082}
+
   kafka:
     order-topic: ${ORDER_EVENTS_TOPIC:spicyeat.order.events}
     payment-topic: ${PAYMENT_EVENTS_TOPIC:spicyeat.payment.events}
@@ -52,12 +62,15 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 3
         ignoreExceptions:
           - com.spicyeat.common.error.ApiException
+
       userService:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
         ignoreExceptions:
           - com.spicyeat.common.error.ApiException
+
   retry:
     instances:
       menuService:
@@ -65,6 +78,7 @@ resilience4j:
         waitDuration: 200ms
         ignoreExceptions:
           - com.spicyeat.common.error.ApiException
+
       userService:
         maxAttempts: 3
         waitDuration: 200ms
@@ -76,9 +90,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+
   endpoint:
     health:
       show-details: never
+
   metrics:
     tags:
       application: order-service
