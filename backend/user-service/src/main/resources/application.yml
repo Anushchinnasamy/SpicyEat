@@ -4,17 +4,25 @@ server:
 spring:
   application:
     name: user-service
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/spicyeat_user}
     username: ${DB_USERNAME:spicyeat}
     password: ${DB_PASSWORD:spicyeat}
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate:
+        default_schema: ${DB_SCHEMA:spicyeat_user}
+
   flyway:
     enabled: true
     locations: classpath:db/migration
+    default-schema: ${DB_SCHEMA:spicyeat_user}
+    schemas: ${DB_SCHEMA:spicyeat_user}
 
 management:
   endpoints:
