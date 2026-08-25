@@ -9,6 +9,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/spicyeat_user}
     username: ${DB_USERNAME:spicyeat}
     password: ${DB_PASSWORD:spicyeat}
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 0
+      connection-timeout: 30000
 
   jpa:
     hibernate:
