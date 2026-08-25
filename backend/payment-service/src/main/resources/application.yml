@@ -4,17 +4,26 @@ server:
 spring:
   application:
     name: payment-service
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/spicyeat_payment}
     username: ${DB_USERNAME:spicyeat}
     password: ${DB_PASSWORD:spicyeat}
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate:
+        default_schema: ${DB_SCHEMA:spicyeat_payment}
+
   flyway:
     enabled: true
     locations: classpath:db/migration
+    default-schema: ${DB_SCHEMA:spicyeat_payment}
+    schemas: ${DB_SCHEMA:spicyeat_payment}
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -30,9 +39,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+
   endpoint:
     health:
       show-details: never
+
   metrics:
     tags:
       application: payment-service
