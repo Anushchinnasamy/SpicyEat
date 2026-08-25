@@ -1,0 +1,95 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: ${GATEWAY_CONNECT_TIMEOUT_MS:3000}
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:10s}
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: ${spicyeat.cors.allowed-origins}
+            allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+            allowedHeaders: '*'
+            allowCredentials: true
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: ${RATE_LIMIT_REPLENISH_PER_SEC:20}
+            redis-rate-limiter.burstCapacity: ${RATE_LIMIT_BURST:40}
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@rateLimiterKeyResolver}"
+      routes:
+        - id: auth-service
+          uri: ${spicyeat.services.auth-uri}
+          predicates:
+            - Path=/api/auth/**
+        - id: user-service
+          uri: ${spicyeat.services.user-uri}
+          predicates:
+            - Path=/api/users/**
+        - id: menu-service
+          uri: ${spicyeat.services.menu-uri}
+          predicates:
+            - Path=/api/menu/**
+        - id: cart-service
+          uri: ${spicyeat.services.cart-uri}
+          predicates:
+            - Path=/api/cart/**
+        - id: order-service
+          uri: ${spicyeat.services.order-uri}
+          predicates:
+            - Path=/api/orders/**
+        - id: payment-service
+          uri: ${spicyeat.services.payment-uri}
+          predicates:
+            - Path=/api/payments/**
+        - id: delivery-service
+          uri: ${spicyeat.services.delivery-uri}
+          predicates:
+            - Path=/api/delivery/**
+        - id: notification-service
+          uri: ${spicyeat.services.notification-uri}
+          predicates:
+            - Path=/api/notifications/**
+
+spicyeat:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-please-32bytes+}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5192}
+  services:
+    auth-uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+    user-uri: ${USER_SERVICE_URI:http://localhost:8082}
+    menu-uri: ${MENU_SERVICE_URI:http://localhost:8083}
+    cart-uri: ${CART_SERVICE_URI:http://localhost:8084}
+    order-uri: ${ORDER_SERVICE_URI:http://localhost:8085}
+    payment-uri: ${PAYMENT_SERVICE_URI:http://localhost:8086}
+    delivery-uri: ${DELIVERY_SERVICE_URI:http://localhost:8087}
+    notification-uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: api-gateway
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%X{correlationId}] %logger{36} - %msg%n"

@@ -1,0 +1,12 @@
+package com.spicyeat.payment.repository;
+
+import com.spicyeat.payment.domain.PaymentAttempt;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, UUID> {
+    List<PaymentAttempt> findByPaymentIdOrderByAttemptNumberAsc(UUID paymentId);
+    int countByPaymentId(UUID paymentId);
+}
