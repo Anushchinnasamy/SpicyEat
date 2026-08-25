@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+@import '@fontsource/anton';
+@import '@fontsource/manrope/400.css';
+@import '@fontsource/manrope/500.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@fontsource/manrope/800.css';
+
+@theme {
+  --color-warm-canvas: #f5f0e8;
+  --color-sun-orange: #fa7e3b;
+  --color-soft-lavender: #c3abc6;
+  --color-deep-ink: #1a1a1a;
+  --color-muted-ink: #68625d;
+  --color-chili-red: #d94a32;
+  --color-herb-green: #687a52;
+
+  /* Admin operations-center dark theme */
+  --color-admin-bg: #0b0b0b;
+  --color-admin-bg2: #111111;
+  --color-admin-card: #151515;
+  --color-admin-card-hover: #1a1a1a;
+  --color-admin-orange: #ff6b2c;
+  --color-admin-orange-bright: #ff7a3d;
+  --color-admin-amber: #ff9a4d;
+  --color-admin-text: #f5f2ec;
+  --color-admin-text2: #a8a39c;
+  --color-admin-muted: #6f6a64;
+  --color-admin-border: rgba(255, 255, 255, 0.08);
+  --color-admin-success: #4ade80;
+  --color-admin-warning: #fbbf24;
+  --color-admin-danger: #ef4444;
+  --color-admin-info: #60a5fa;
+
+  --font-display: 'Anton', 'Impact', sans-serif;
+  --font-sans: 'Manrope', system-ui, sans-serif;
+
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-chilli-spin: chilli-spin 6s linear infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes chilli-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--color-warm-canvas);
+  color: var(--color-deep-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
