@@ -23,6 +23,7 @@ spring:
     locations: classpath:db/migration
     default-schema: ${DB_SCHEMA:spicyeat_auth}
     schemas: ${DB_SCHEMA:spicyeat_auth}
+    create-schemas: true
 
 spicyeat:
   jwt:
