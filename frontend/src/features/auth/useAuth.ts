@@ -14,8 +14,8 @@ export function useAuth() {
       const res = await login(payload)
       setUser(res.data)
       return true
-    } catch {
-      setError('Something got a little too hot. Try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something got a little too hot. Try again.')
       return false
     } finally {
       setLoading(false)
@@ -29,8 +29,8 @@ export function useAuth() {
       const res = await register(payload)
       setUser(res.data)
       return true
-    } catch {
-      setError('Something got a little too hot. Try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something got a little too hot. Try again.')
       return false
     } finally {
       setLoading(false)

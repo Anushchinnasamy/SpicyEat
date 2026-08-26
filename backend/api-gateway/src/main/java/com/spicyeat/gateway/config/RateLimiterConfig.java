@@ -24,7 +24,10 @@ public class RateLimiterConfig {
                 return Mono.just(userId);
             }
             var remoteAddress = exchange.getRequest().getRemoteAddress();
-            return Mono.just(remoteAddress == null ? "unknown" : remoteAddress.getAddress().getHostAddress());
+            if (remoteAddress == null || remoteAddress.getAddress() == null) {
+                return Mono.just("unknown");
+            }
+            return Mono.just(remoteAddress.getAddress().getHostAddress());
         };
     }
 }
