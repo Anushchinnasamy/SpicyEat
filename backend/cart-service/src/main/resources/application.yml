@@ -27,6 +27,7 @@ spring:
     locations: classpath:db/migration
     default-schema: ${DB_SCHEMA:spicyeat_cart}
     schemas: ${DB_SCHEMA:spicyeat_cart}
+    create-schemas: true
 
 spicyeat:
   services:

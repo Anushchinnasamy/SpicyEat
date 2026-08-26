@@ -27,6 +27,7 @@ spring:
     locations: classpath:db/migration
     default-schema: ${DB_SCHEMA:spicyeat_user}
     schemas: ${DB_SCHEMA:spicyeat_user}
+    create-schemas: true
 
 management:
   endpoints:

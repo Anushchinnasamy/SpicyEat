@@ -27,6 +27,7 @@ spring:
     locations: classpath:db/migration
     default-schema: ${DB_SCHEMA:spicyeat_menu}
     schemas: ${DB_SCHEMA:spicyeat_menu}
+    create-schemas: true
 
   cache:
     type: redis
