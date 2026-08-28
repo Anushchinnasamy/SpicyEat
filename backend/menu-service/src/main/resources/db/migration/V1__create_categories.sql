@@ -1,4 +1,10 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+EXCEPTION WHEN duplicate_object THEN
+    NULL;
+END
+$$;
 
 CREATE TABLE categories (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
