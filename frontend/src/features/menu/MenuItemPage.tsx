@@ -9,12 +9,15 @@ import { Button } from '../../components/buttons/Button'
 import { LoadingState, ErrorState } from '../../components/feedback/States'
 import { fetchFoodBySlug, fetchRelated } from '../../api/menu'
 import { useCartStore } from '../../state/cartStore'
+import { useFavouritesStore } from '../../state/favouritesStore'
 import type { AddOn, Food, SizeOption, SpiceLevel } from '../../types'
 
 export function MenuItemPage() {
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const addItem = useCartStore((s) => s.addItem)
+  const favouriteIds = useFavouritesStore((s) => s.ids)
+  const toggleFavourite = useFavouritesStore((s) => s.toggle)
 
   const [food, setFood] = useState<Food | null | undefined>(undefined)
   const [related, setRelated] = useState<Food[]>([])
@@ -57,6 +60,7 @@ export function MenuItemPage() {
   }
 
   const currentFood: Food = food
+  const isFavourite = favouriteIds.has(currentFood.id)
   const size = currentFood.sizes?.find((s: SizeOption) => s.id === sizeId)
   const selectedAddOns: AddOn[] = (currentFood.addOns ?? []).filter((a) => addOnIds.includes(a.id))
   const unitPrice = currentFood.price + (size?.price ?? 0) + selectedAddOns.reduce((sum, a) => sum + a.price, 0)
@@ -100,7 +104,17 @@ export function MenuItemPage() {
                   ⭐ {food.rating} <span className="text-muted-ink">({food.reviewCount} reviews)</span>
                 </span>
               </div>
-              <VegBadge isVeg={food.isVeg} />
+              <div className="flex items-center gap-2">
+                <VegBadge isVeg={food.isVeg} />
+                <button
+                  type="button"
+                  aria-label={isFavourite ? `Remove ${food.name} from favourites` : `Add ${food.name} to favourites`}
+                  onClick={() => toggleFavourite(currentFood.id, currentFood.name)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-soft-lavender/40 text-base transition-transform hover:scale-110"
+                >
+                  {isFavourite ? '❤️' : '🤍'}
+                </button>
+              </div>
             </div>
 
             <p className="text-sm leading-relaxed text-muted-ink">{food.description}</p>

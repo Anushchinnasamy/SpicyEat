@@ -67,11 +67,11 @@ export async function login(payload: LoginPayload): Promise<ApiResult<User>> {
   })
   
   // Set tokens temporarily so subsequent calls have the Bearer token attached automatically
-  useAuthStore.getState().setSession({ id: '', name: '', email: '' }, tokens.accessToken, tokens.refreshToken)
+  useAuthStore.getState().setSession({ id: '', name: '', email: '', role: '' }, tokens.accessToken, tokens.refreshToken)
 
   try {
     const [me, profile] = await Promise.all([fetchMe(), fetchProfile()])
-    const user: User = { id: me.id, name: profile.fullName || me.email.split('@')[0], email: me.email }
+    const user: User = { id: me.id, name: profile.fullName || me.email.split('@')[0], email: me.email, role: me.role }
     persistSession(user, tokens)
     return { data: user }
   } catch (error) {
@@ -91,12 +91,12 @@ export async function register(payload: RegisterPayload): Promise<ApiResult<User
   })
   
   // Set tokens temporarily so subsequent calls have the Bearer token
-  useAuthStore.getState().setSession({ id: '', name: '', email: '' }, tokens.accessToken, tokens.refreshToken)
+  useAuthStore.getState().setSession({ id: '', name: '', email: '', role: '' }, tokens.accessToken, tokens.refreshToken)
 
   try {
     const me = await fetchMe()
     const profile = await updateProfileName(payload.name)
-    const user: User = { id: me.id, name: profile.fullName || payload.name, email: me.email }
+    const user: User = { id: me.id, name: profile.fullName || payload.name, email: me.email, role: me.role }
     persistSession(user, tokens)
     return { data: user }
   } catch (error) {
@@ -116,6 +116,13 @@ export async function resetPassword(payload: ResetPasswordPayload): Promise<void
   await fetchApi('/api/auth/reset-password', {
     method: 'POST',
     body: JSON.stringify(payload),
+  })
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await fetchApi('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
   })
 }
 

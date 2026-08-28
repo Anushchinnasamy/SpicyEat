@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { addToCart, clearCartOnServer, getCart, removeCartItem, updateCartItem, type CartItemResponse } from '../api/cart'
 import { fetchApi } from '../api/client'
 import { SPICE_LEVEL_FROM_BACKEND, type MenuItemResponse } from '../api/menuMapper'
+import { useAuthStore } from './authStore'
+import { toast } from './toastStore'
 import type { AddOn, CartLineItem, Food, SizeOption, SpiceLevel } from '../types'
 
 interface AddToCartInput {
@@ -61,12 +63,21 @@ export const useCartStore = create<CartState>()((set, get) => ({
   },
 
   addItem: async ({ food, quantity, addOns = [] }) => {
-    const cart = await addToCart(
-      food.id,
-      quantity,
-      addOns.map((a) => a.id),
-    )
-    set({ items: await toLineItems(cart.items), loaded: true })
+    if (!useAuthStore.getState().accessToken) {
+      toast.error('Log in to add items to your cart')
+      return
+    }
+    try {
+      const cart = await addToCart(
+        food.id,
+        quantity,
+        addOns.map((a) => a.id),
+      )
+      set({ items: await toLineItems(cart.items), loaded: true })
+      toast.success(`${food.name} added to cart`)
+    } catch {
+      toast.error('Could not add item to cart')
+    }
   },
 
   removeItem: async (lineId) => {

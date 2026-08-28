@@ -1,50 +1,72 @@
-import { apiRequest } from './client'
-import { fetchPartnerOrders } from './orders'
-import type { Order } from '../types'
+import { fetchApi } from './client'
 
-export async function fetchActiveDelivery(partnerId: string): Promise<{ data: Order | null }> {
-  const { data: orders } = await fetchPartnerOrders(partnerId)
-  const active = orders.find((o) => o.status === 'ASSIGNED' || o.status === 'OUT_FOR_DELIVERY') ?? null
-  return apiRequest(() => active, 150)
+export type DeliveryStatus = 'UNASSIGNED' | 'ASSIGNED' | 'PICKED_UP' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'FAILED'
+
+export interface DeliveryAddress {
+  label: string
+  line1: string
+  line2: string | null
+  city: string
+  state: string
+  postalCode: string
 }
 
-export async function fetchDeliveryHistory(partnerId: string): Promise<{ data: Order[] }> {
-  const { data: orders } = await fetchPartnerOrders(partnerId)
-  const delivered = orders
-    .filter((o) => o.status === 'DELIVERED')
-    .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime())
-  return apiRequest(() => delivered, 150)
+export interface DeliveryOrderItem {
+  itemName: string
+  quantity: number
+  unitPrice: number
 }
 
-export interface EarningsSummary {
-  today: number
-  week: number
-  total: number
-  deliveriesToday: number
-  breakdown: { orderId: string; date: string; fee: number }[]
+export interface RealDelivery {
+  id: string
+  orderId: string
+  status: DeliveryStatus
+  partnerId: string | null
+  assignedAt: string | null
+  pickedUpAt: string | null
+  deliveredAt: string | null
+  createdAt: string
+  updatedAt: string
+  deliveryAddress: DeliveryAddress | null
+  items: DeliveryOrderItem[] | null
+  orderTotal: number | null
 }
 
-const RIDER_SHARE = 0.8
+export interface RealEarning {
+  id: string
+  deliveryId: string
+  amount: number
+  createdAt: string
+}
 
-export async function fetchEarnings(partnerId: string): Promise<{ data: EarningsSummary }> {
-  const { data: delivered } = await fetchDeliveryHistory(partnerId)
-  const now = Date.now()
-  const todayKey = new Date().toDateString()
-  const weekMs = 7 * 24 * 60 * 60 * 1000
+export function fetchAvailableDeliveries(): Promise<RealDelivery[]> {
+  return fetchApi<RealDelivery[]>('/api/delivery/available')
+}
 
-  const earn = (o: Order) => Math.round(o.deliveryFee * RIDER_SHARE)
+export function fetchActiveDeliveries(): Promise<RealDelivery[]> {
+  return fetchApi<RealDelivery[]>('/api/delivery/active')
+}
 
-  const today = delivered.filter((o) => new Date(o.placedAt).toDateString() === todayKey)
-  const week = delivered.filter((o) => now - new Date(o.placedAt).getTime() <= weekMs)
+export function fetchDeliveryHistory(): Promise<RealDelivery[]> {
+  return fetchApi<RealDelivery[]>('/api/delivery/history')
+}
 
-  return apiRequest(
-    () => ({
-      today: today.reduce((s, o) => s + earn(o), 0),
-      week: week.reduce((s, o) => s + earn(o), 0),
-      total: delivered.reduce((s, o) => s + earn(o), 0),
-      deliveriesToday: today.length,
-      breakdown: delivered.slice(0, 20).map((o) => ({ orderId: o.id, date: o.placedAt, fee: earn(o) })),
-    }),
-    150,
-  )
+export function fetchEarningsList(): Promise<RealEarning[]> {
+  return fetchApi<RealEarning[]>('/api/delivery/earnings')
+}
+
+export function acceptDelivery(id: string): Promise<RealDelivery> {
+  return fetchApi<RealDelivery>(`/api/delivery/${id}/accept`, { method: 'POST' })
+}
+
+export function pickupDelivery(id: string): Promise<RealDelivery> {
+  return fetchApi<RealDelivery>(`/api/delivery/${id}/pickup`, { method: 'POST' })
+}
+
+export function startDelivery(id: string): Promise<RealDelivery> {
+  return fetchApi<RealDelivery>(`/api/delivery/${id}/start`, { method: 'POST' })
+}
+
+export function completeDelivery(id: string): Promise<RealDelivery> {
+  return fetchApi<RealDelivery>(`/api/delivery/${id}/complete`, { method: 'POST' })
 }

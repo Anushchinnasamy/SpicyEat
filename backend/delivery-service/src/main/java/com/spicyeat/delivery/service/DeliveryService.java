@@ -3,9 +3,11 @@ package com.spicyeat.delivery.service;
 import com.spicyeat.common.error.ApiException;
 import com.spicyeat.delivery.client.OrderServiceClient;
 import com.spicyeat.delivery.domain.Delivery;
+import com.spicyeat.delivery.domain.DeliveryPartnerProfile;
 import com.spicyeat.delivery.domain.DeliveryStatus;
 import com.spicyeat.delivery.domain.DeliveryStatusHistory;
 import com.spicyeat.delivery.domain.Earning;
+import com.spicyeat.delivery.repository.DeliveryPartnerProfileRepository;
 import com.spicyeat.delivery.repository.DeliveryRepository;
 import com.spicyeat.delivery.repository.DeliveryStatusHistoryRepository;
 import com.spicyeat.delivery.repository.EarningRepository;
@@ -32,17 +34,50 @@ public class DeliveryService {
     private final DeliveryStatusHistoryRepository historyRepository;
     private final EarningRepository earningRepository;
     private final OrderServiceClient orderServiceClient;
+    private final DeliveryPartnerProfileRepository partnerProfileRepository;
 
     public DeliveryService(
             DeliveryRepository deliveryRepository,
             DeliveryStatusHistoryRepository historyRepository,
             EarningRepository earningRepository,
-            OrderServiceClient orderServiceClient
+            OrderServiceClient orderServiceClient,
+            DeliveryPartnerProfileRepository partnerProfileRepository
     ) {
         this.deliveryRepository = deliveryRepository;
         this.historyRepository = historyRepository;
         this.earningRepository = earningRepository;
         this.orderServiceClient = orderServiceClient;
+        this.partnerProfileRepository = partnerProfileRepository;
+    }
+
+    @Transactional
+    public DeliveryPartnerProfile getOrCreateProfile(UUID partnerId) {
+        return partnerProfileRepository.findById(partnerId)
+                .orElseGet(() -> partnerProfileRepository.save(new DeliveryPartnerProfile(partnerId)));
+    }
+
+    @Transactional
+    public DeliveryPartnerProfile updateProfile(UUID partnerId, String vehicle) {
+        DeliveryPartnerProfile profile = getOrCreateProfile(partnerId);
+        profile.setVehicle(vehicle);
+        return partnerProfileRepository.save(profile);
+    }
+
+    @Transactional
+    public DeliveryPartnerProfile setOnline(UUID partnerId, boolean online) {
+        DeliveryPartnerProfile profile = getOrCreateProfile(partnerId);
+        profile.setOnline(online);
+        return partnerProfileRepository.save(profile);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DeliveryPartnerProfile> listAllPartnerProfiles() {
+        return partnerProfileRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public long countCompletedDeliveries(UUID partnerId) {
+        return deliveryRepository.countByPartnerIdAndStatus(partnerId, DeliveryStatus.DELIVERED);
     }
 
     /** Called internally by payment-service once a payment succeeds; idempotent per orderId. */

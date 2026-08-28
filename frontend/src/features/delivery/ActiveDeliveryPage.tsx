@@ -4,50 +4,44 @@ import { motion } from 'framer-motion'
 import { DeliveryLayout } from './DeliveryLayout'
 import { Button } from '../../components/buttons/Button'
 import { LoadingState, EmptyState } from '../../components/feedback/States'
-import { useDeliveryAuthStore } from '../../state/deliveryAuthStore'
-import { fetchActiveDelivery } from '../../api/delivery'
-import { markPickedUp, markDelivered } from '../../api/orders'
+import { toast } from '../../state/toastStore'
+import { fetchActiveDeliveries, pickupDelivery, startDelivery, completeDelivery, type RealDelivery } from '../../api/delivery'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
-import type { Order } from '../../types'
 
 const STEPS = [
   { key: 'ASSIGNED', label: 'Navigate to SpicyEat' },
+  { key: 'PICKED_UP', label: 'Picked up — head out' },
   { key: 'OUT_FOR_DELIVERY', label: 'Navigate to Customer' },
   { key: 'DELIVERED', label: 'Delivered' },
 ]
 
 export function ActiveDeliveryPage() {
-  const partnerId = useDeliveryAuthStore((s) => s.partnerId)
-  const [order, setOrder] = useState<Order | null | undefined>(undefined)
+  const [delivery, setDelivery] = useState<RealDelivery | null | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const reducedMotion = useReducedMotion()
 
   function load() {
-    if (!partnerId) return
-    fetchActiveDelivery(partnerId).then((res) => setOrder(res.data))
+    fetchActiveDeliveries()
+      .then((list) => setDelivery(list[0] ?? null))
+      .catch(() => setDelivery(null))
   }
 
-  useEffect(load, [partnerId])
+  useEffect(load, [])
 
-  async function handlePickedUp() {
-    if (!order) return
+  async function handleAction(action: (id: string) => Promise<RealDelivery>) {
+    if (!delivery) return
     setBusy(true)
-    await markPickedUp(order.id)
-    setBusy(false)
-    load()
+    try {
+      const updated = await action(delivery.id)
+      setDelivery(updated)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update this delivery')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  async function handleDelivered() {
-    if (!order) return
-    setBusy(true)
-    await markDelivered(order.id)
-    setBusy(false)
-    // Don't refetch via fetchActiveDelivery — it excludes DELIVERED orders.
-    // Update locally so the completion state renders instead of "no active delivery".
-    setOrder((prev) => (prev ? { ...prev, status: 'DELIVERED' } : prev))
-  }
-
-  if (order === undefined) {
+  if (delivery === undefined) {
     return (
       <DeliveryLayout title="Active Delivery">
         <LoadingState />
@@ -55,7 +49,7 @@ export function ActiveDeliveryPage() {
     )
   }
 
-  if (order === null) {
+  if (delivery === null) {
     return (
       <DeliveryLayout title="Active Delivery">
         <EmptyState
@@ -71,17 +65,17 @@ export function ActiveDeliveryPage() {
     )
   }
 
-  const stepIndex = STEPS.findIndex((s) => s.key === order.status)
-  const routeProgress = order.status === 'ASSIGNED' ? 0.15 : order.status === 'OUT_FOR_DELIVERY' ? 0.75 : 1
+  const stepIndex = STEPS.findIndex((s) => s.key === delivery.status)
+  const routeProgress = delivery.status === 'ASSIGNED' ? 0.05 : delivery.status === 'PICKED_UP' ? 0.35 : delivery.status === 'OUT_FOR_DELIVERY' ? 0.75 : 1
 
   return (
     <DeliveryLayout title="Active Delivery">
       <div className="flex flex-col gap-5">
         <div className="rounded-2xl border border-admin-border bg-admin-card p-5">
           <div className="flex items-center justify-between">
-            <p className="font-semibold text-admin-text">{order.id}</p>
+            <p className="font-semibold text-admin-text">{delivery.id.slice(0, 8)}</p>
             <span className="rounded-full bg-admin-orange/15 px-3 py-1 text-xs font-bold text-admin-orange-bright">
-              {order.status.replace(/_/g, ' ')}
+              {delivery.status.replace(/_/g, ' ')}
             </span>
           </div>
 
@@ -141,25 +135,25 @@ export function ActiveDeliveryPage() {
 
         <div className="rounded-2xl border border-admin-border bg-admin-card p-5">
           <p className="font-bold text-admin-text">Deliver to</p>
-          <p className="mt-2 text-sm text-admin-text">{order.address.name}</p>
-          <p className="text-xs text-admin-text2">
-            {order.address.line1}, {order.address.city} {order.address.pincode}
-          </p>
-          <a
-            href={`tel:${order.address.phone}`}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/5 px-4 py-2 text-xs font-bold text-admin-text transition-colors hover:bg-white/10"
-          >
-            📞 Call Customer
-          </a>
+          {delivery.deliveryAddress ? (
+            <>
+              <p className="mt-2 text-sm text-admin-text">{delivery.deliveryAddress.label}</p>
+              <p className="text-xs text-admin-text2">
+                {delivery.deliveryAddress.line1}, {delivery.deliveryAddress.city} {delivery.deliveryAddress.postalCode}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-admin-text2">Address unavailable</p>
+          )}
         </div>
 
         <div className="rounded-2xl border border-admin-border bg-admin-card p-5">
           <p className="font-bold text-admin-text">Items</p>
           <ul className="mt-3 flex flex-col gap-2">
-            {order.items.map((item) => (
-              <li key={item.lineId} className="flex justify-between text-sm text-admin-text2">
+            {(delivery.items ?? []).map((item, i) => (
+              <li key={i} className="flex justify-between text-sm text-admin-text2">
                 <span>
-                  {item.quantity}× {item.name}
+                  {item.quantity}× {item.itemName}
                 </span>
                 <span className="text-admin-text">₹{item.unitPrice * item.quantity}</span>
               </li>
@@ -167,21 +161,26 @@ export function ActiveDeliveryPage() {
           </ul>
           <div className="mt-3 flex justify-between border-t border-admin-border pt-3 font-semibold text-admin-text">
             <span>Total</span>
-            <span>₹{order.total}</span>
+            <span>₹{delivery.orderTotal ?? '—'}</span>
           </div>
         </div>
 
-        {order.status === 'ASSIGNED' && (
-          <Button type="button" disabled={busy} onClick={handlePickedUp} className="w-full justify-center">
+        {delivery.status === 'ASSIGNED' && (
+          <Button type="button" disabled={busy} onClick={() => handleAction(pickupDelivery)} className="w-full justify-center">
             {busy ? 'Updating...' : 'Mark Picked Up →'}
           </Button>
         )}
-        {order.status === 'OUT_FOR_DELIVERY' && (
-          <Button type="button" disabled={busy} onClick={handleDelivered} className="w-full justify-center">
+        {delivery.status === 'PICKED_UP' && (
+          <Button type="button" disabled={busy} onClick={() => handleAction(startDelivery)} className="w-full justify-center">
+            {busy ? 'Updating...' : 'Start Delivery →'}
+          </Button>
+        )}
+        {delivery.status === 'OUT_FOR_DELIVERY' && (
+          <Button type="button" disabled={busy} onClick={() => handleAction(completeDelivery)} className="w-full justify-center">
             {busy ? 'Updating...' : 'Mark Delivered →'}
           </Button>
         )}
-        {order.status === 'DELIVERED' && (
+        {delivery.status === 'DELIVERED' && (
           <div className="rounded-2xl border border-admin-success/30 bg-admin-success/10 p-5 text-center">
             <p className="font-bold text-admin-success">Delivered! 🎉</p>
             <Link to="/delivery/available" className="mt-2 inline-block text-sm font-semibold text-admin-orange-bright hover:underline">

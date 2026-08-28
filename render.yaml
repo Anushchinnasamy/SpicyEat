@@ -139,6 +139,18 @@ services:
       - key: MENU_SERVICE_URI
         value: http://menu-service:8083
 
+  # Kafka is intentionally NOT configured for this deployment (no managed Kafka
+  # provider wired up yet). order/payment/delivery/notification-service fall
+  # back to their localhost:9092 default, which is unreachable from Render, so
+  # Kafka producers/consumers just log connection warnings and retry forever —
+  # harmless to app health, but these features won't fire in production:
+  #   - order-placed / payment-succeeded emails
+  #   - order status auto-advancing PLACED -> CONFIRMED after payment
+  #   - delivery record auto-creating when a payment succeeds
+  # (Same gaps local dev has without podman Kafka running.) Add
+  # KAFKA_BOOTSTRAP_SERVERS/KAFKA_SECURITY_PROTOCOL/KAFKA_SASL_* env vars to
+  # the four services below once you wire up a managed Kafka provider.
+
   - type: web
     name: order-service
     runtime: docker
@@ -158,20 +170,14 @@ services:
         sync: false
       - key: DB_SCHEMA
         value: spicyeat_order
-      - key: KAFKA_BOOTSTRAP_SERVERS
-        sync: false
-      - key: KAFKA_SECURITY_PROTOCOL
-        value: PLAINTEXT
-      - key: KAFKA_SASL_MECHANISM
-        value: PLAIN
-      - key: KAFKA_SASL_JAAS_CONFIG
-        sync: false
       - key: CART_SERVICE_URI
         value: http://cart-service:8084
       - key: MENU_SERVICE_URI
         value: http://menu-service:8083
       - key: USER_SERVICE_URI
         value: http://user-service:8082
+      - key: PAYMENT_SERVICE_URI
+        value: http://payment-service:8086
 
   - type: web
     name: payment-service
@@ -192,14 +198,6 @@ services:
         sync: false
       - key: DB_SCHEMA
         value: spicyeat_payment
-      - key: KAFKA_BOOTSTRAP_SERVERS
-        sync: false
-      - key: KAFKA_SECURITY_PROTOCOL
-        value: PLAINTEXT
-      - key: KAFKA_SASL_MECHANISM
-        value: PLAIN
-      - key: KAFKA_SASL_JAAS_CONFIG
-        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
@@ -207,7 +205,7 @@ services:
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: STRIPE_CURRENCY
-        value: "inr"
+        value: inr
 
   - type: web
     name: delivery-service
@@ -228,14 +226,6 @@ services:
         sync: false
       - key: DB_SCHEMA
         value: spicyeat_delivery
-      - key: KAFKA_BOOTSTRAP_SERVERS
-        sync: false
-      - key: KAFKA_SECURITY_PROTOCOL
-        value: PLAINTEXT
-      - key: KAFKA_SASL_MECHANISM
-        value: PLAIN
-      - key: KAFKA_SASL_JAAS_CONFIG
-        sync: false
       - key: ORDER_SERVICE_URI
         value: http://order-service:8085
 
@@ -258,14 +248,6 @@ services:
         sync: false
       - key: DB_SCHEMA
         value: spicyeat_notification
-      - key: KAFKA_BOOTSTRAP_SERVERS
-        sync: false
-      - key: KAFKA_SECURITY_PROTOCOL
-        value: PLAINTEXT
-      - key: KAFKA_SASL_MECHANISM
-        value: PLAIN
-      - key: KAFKA_SASL_JAAS_CONFIG
-        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM_ADDRESS

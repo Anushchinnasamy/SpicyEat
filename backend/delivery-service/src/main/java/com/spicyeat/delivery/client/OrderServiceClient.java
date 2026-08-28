@@ -2,6 +2,7 @@ package com.spicyeat.delivery.client;
 
 import com.spicyeat.common.feign.InternalServiceCallFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,4 +15,7 @@ public interface OrderServiceClient {
 
     @PostMapping("/api/orders/{id}/status")
     void updateStatus(@PathVariable("id") UUID orderId, @RequestBody Map<String, String> body);
+
+    @GetMapping("/api/orders/internal/{id}")
+    OrderSummary getOrder(@PathVariable("id") UUID orderId);
 }

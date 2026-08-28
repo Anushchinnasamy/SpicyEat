@@ -3,25 +3,23 @@ import { Link } from 'react-router-dom'
 import { DeliveryLayout } from './DeliveryLayout'
 import { StatCard } from '../../components/admin/StatCard'
 import { LoadingState } from '../../components/feedback/States'
-import { useDeliveryAuthStore } from '../../state/deliveryAuthStore'
-import { fetchAvailableOrders } from '../../api/orders'
-import { fetchActiveDelivery, fetchEarnings, type EarningsSummary } from '../../api/delivery'
-import type { Order } from '../../types'
+import { fetchAvailableDeliveries, fetchActiveDeliveries, fetchEarningsList, type RealDelivery, type RealEarning } from '../../api/delivery'
 
 export function DeliveryDashboardPage() {
-  const partnerId = useDeliveryAuthStore((s) => s.partnerId)
-  const [available, setAvailable] = useState<Order[] | null>(null)
-  const [active, setActive] = useState<Order | null>(null)
-  const [earnings, setEarnings] = useState<EarningsSummary | null>(null)
+  const [available, setAvailable] = useState<RealDelivery[] | null>(null)
+  const [active, setActive] = useState<RealDelivery | null>(null)
+  const [earnings, setEarnings] = useState<RealEarning[] | null>(null)
 
   useEffect(() => {
-    if (!partnerId) return
-    fetchAvailableOrders().then((res) => setAvailable(res.data))
-    fetchActiveDelivery(partnerId).then((res) => setActive(res.data))
-    fetchEarnings(partnerId).then((res) => setEarnings(res.data))
-  }, [partnerId])
+    fetchAvailableDeliveries().then(setAvailable).catch(() => setAvailable([]))
+    fetchActiveDeliveries().then((list) => setActive(list[0] ?? null)).catch(() => setActive(null))
+    fetchEarningsList().then(setEarnings).catch(() => setEarnings([]))
+  }, [])
 
   const loading = available === null || earnings === null
+
+  const todayKey = new Date().toDateString()
+  const todayEarnings = earnings?.filter((e) => new Date(e.createdAt).toDateString() === todayKey) ?? []
 
   return (
     <DeliveryLayout title="Ready to get spicy?">
@@ -38,8 +36,10 @@ export function DeliveryDashboardPage() {
                 <p className="text-[11px] font-bold uppercase tracking-wide text-admin-orange-bright">
                   Active Delivery
                 </p>
-                <p className="mt-1 font-semibold text-admin-text">{active.id}</p>
-                <p className="text-xs text-admin-text2">{active.address.name} · ₹{active.total}</p>
+                <p className="mt-1 font-semibold text-admin-text">{active.id.slice(0, 8)}</p>
+                <p className="text-xs text-admin-text2">
+                  {active.deliveryAddress?.city ?? 'Unknown'} · ₹{active.orderTotal ?? '—'}
+                </p>
               </div>
               <span aria-hidden className="text-2xl">
                 🛵
@@ -49,8 +49,8 @@ export function DeliveryDashboardPage() {
 
           <div className="grid grid-cols-3 gap-3">
             <StatCard label="Available" value={String(available.length)} accent />
-            <StatCard label="Deliveries Today" value={String(earnings.deliveriesToday)} />
-            <StatCard label="Earned Today" value={`₹${earnings.today}`} />
+            <StatCard label="Deliveries Today" value={String(todayEarnings.length)} />
+            <StatCard label="Earned Today" value={`₹${todayEarnings.reduce((s, e) => s + e.amount, 0)}`} />
           </div>
 
           <div className="rounded-2xl border border-admin-border bg-admin-card p-5">
@@ -64,15 +64,15 @@ export function DeliveryDashboardPage() {
               <p className="mt-4 text-sm text-admin-text2">No orders ready for pickup right now.</p>
             ) : (
               <div className="mt-3 flex flex-col divide-y divide-admin-border">
-                {available.slice(0, 3).map((order) => (
-                  <div key={order.id} className="flex items-center justify-between py-3 text-sm">
+                {available.slice(0, 3).map((delivery) => (
+                  <div key={delivery.id} className="flex items-center justify-between py-3 text-sm">
                     <div>
-                      <p className="font-semibold text-admin-text">{order.id}</p>
+                      <p className="font-semibold text-admin-text">{delivery.id.slice(0, 8)}</p>
                       <p className="text-xs text-admin-text2">
-                        {order.address.city} · {order.items.length} items
+                        {delivery.deliveryAddress?.city ?? 'Unknown'} · {delivery.items?.length ?? 0} items
                       </p>
                     </div>
-                    <span className="font-semibold text-admin-text">₹{order.total}</span>
+                    <span className="font-semibold text-admin-text">₹{delivery.orderTotal ?? '—'}</span>
                   </div>
                 ))}
               </div>

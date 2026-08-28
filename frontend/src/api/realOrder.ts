@@ -67,3 +67,14 @@ export function cancelOrder(id: string, reason?: string): Promise<RealOrder> {
     body: reason ? JSON.stringify({ reason }) : undefined,
   })
 }
+
+export function fetchAllOrdersAdmin(): Promise<RealOrder[]> {
+  return fetchApi<RealOrder[]>('/api/orders/admin')
+}
+
+export function updateOrderStatusAdmin(id: string, status: RealOrderStatus): Promise<RealOrder> {
+  return fetchApi<RealOrder>(`/api/orders/${id}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  })
+}

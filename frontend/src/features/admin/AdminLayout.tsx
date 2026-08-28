@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { useAdminAuthStore } from '../../state/adminAuthStore'
+import { performLogout } from '../../api/auth'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
 import { AdminSidebar } from './components/AdminSidebar'
 import { AdminHeader } from './components/AdminHeader'
@@ -13,13 +13,12 @@ interface Props {
 }
 
 export function AdminLayout({ title, subtitle, children }: Props) {
-  const logout = useAdminAuthStore((s) => s.logout)
   const navigate = useNavigate()
   const reducedMotion = useReducedMotion()
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    await performLogout()
     navigate('/admin/login')
   }
 

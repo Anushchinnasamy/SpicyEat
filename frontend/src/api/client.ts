@@ -48,10 +48,7 @@ export async function fetchApi<T>(path: string, options: RequestInit = {}): Prom
     throw new Error(await parseErrorMessage(res))
   }
 
-  // Handle 204 No Content
-  if (res.status === 204) {
-    return null as T
-  }
-
-  return res.json()
+  // Some endpoints (e.g. 202 Accepted, 204 No Content) return an empty body.
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
 }

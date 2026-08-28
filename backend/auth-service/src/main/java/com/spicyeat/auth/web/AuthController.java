@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -61,10 +62,22 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/change-password")
+    public ResponseEntity<Void> changePassword(HttpServletRequest request, @Valid @RequestBody ChangePasswordRequest body) {
+        authService.changePassword(CurrentUser.userId(request), body.currentPassword(), body.newPassword());
+        return ResponseEntity.noContent().build();
+    }
+
     /** Internal-only: lets notification-service resolve a recipient's email from a userId it doesn't otherwise have. */
     @GetMapping("/internal/users/{id}")
     public UserView getUserById(HttpServletRequest request, @PathVariable UUID id) {
         CurrentUser.requireRole(request, Role.ADMIN);
         return authService.getUserView(id);
+    }
+
+    @GetMapping("/admin/users")
+    public List<UserSummaryResponse> listUsers(HttpServletRequest request) {
+        CurrentUser.requireRole(request, Role.ADMIN);
+        return authService.listUsers();
     }
 }

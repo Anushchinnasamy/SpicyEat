@@ -1,5 +1,5 @@
 import { buildSmoothPath, type Point } from './chartUtils'
-import type { Order } from '../../../types'
+import type { RealOrder } from '../../../api/realOrder'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -18,11 +18,11 @@ function last7Days() {
   return days
 }
 
-export function RevenueOverview({ orders }: { orders: Order[] }) {
+export function RevenueOverview({ orders }: { orders: RealOrder[] }) {
   const days = last7Days()
   const revenueByDay = days.map((d) => {
     const key = d.toDateString()
-    return orders.filter((o) => new Date(o.placedAt).toDateString() === key).reduce((sum, o) => sum + o.total, 0)
+    return orders.filter((o) => new Date(o.createdAt).toDateString() === key).reduce((sum, o) => sum + o.total, 0)
   })
 
   const total = revenueByDay.reduce((a, b) => a + b, 0)

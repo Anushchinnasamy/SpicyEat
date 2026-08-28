@@ -61,6 +61,22 @@ public class PaymentController {
         return PaymentResponse.from(paymentService.getPayment(userId, id));
     }
 
+    @GetMapping("/by-order/{orderId}")
+    public PaymentResponse getByOrder(HttpServletRequest request, @PathVariable UUID orderId) {
+        UUID callerId = CurrentUser.userId(request);
+        boolean isAdmin = CurrentUser.hasRole(request, Role.ADMIN);
+        return PaymentResponse.from(paymentService.getPaymentByOrder(orderId, callerId, isAdmin));
+    }
+
+    /** Internal-only: order-service calls this when a customer cancels an order, to refund it automatically. */
+    @PostMapping("/internal/refund-by-order/{orderId}")
+    public ResponseEntity<PaymentResponse> refundByOrderInternal(HttpServletRequest request, @PathVariable UUID orderId) {
+        CurrentUser.requireRole(request, Role.ADMIN);
+        return paymentService.refundFullyByOrder(orderId)
+                .map(payment -> ResponseEntity.ok(PaymentResponse.from(payment)))
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
     @PostMapping("/{id}/verify")
     public PaymentResponse verify(HttpServletRequest request, @PathVariable UUID id) {
         UUID userId = CurrentUser.userId(request);

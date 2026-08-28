@@ -62,7 +62,7 @@ function PaymentForm({ paymentId, amount, onSuccess }: Omit<Props, 'clientSecret
 
   return (
     <form onSubmit={handlePay} className="flex flex-col gap-4">
-      <PaymentElement />
+      <PaymentElement options={{ wallets: { link: 'never' } }} />
       {error && <p className="text-sm text-chili-red">{error}</p>}
       <Button type="submit" disabled={!stripe || submitting} className="w-full justify-center">
         {submitting ? 'Processing payment...' : `Pay ₹${amount}`}

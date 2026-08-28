@@ -70,45 +70,7 @@ export interface User {
   id: string
   name: string
   email: string
-}
-
-export type PaymentMethod = 'card' | 'upi' | 'cod'
-export type DeliveryOption = 'standard' | 'express'
-
-export type OrderStatus =
-  | 'PLACED'
-  | 'CONFIRMED'
-  | 'PREPARING'
-  | 'READY'
-  | 'ASSIGNED'
-  | 'OUT_FOR_DELIVERY'
-  | 'DELIVERED'
-
-export interface OrderAddress {
-  name: string
-  phone: string
-  line1: string
-  city: string
-  pincode: string
-}
-
-export interface Order {
-  id: string
-  items: CartLineItem[]
-  subtotal: number
-  deliveryFee: number
-  discount: number
-  total: number
-  address: OrderAddress
-  deliveryOption: DeliveryOption
-  paymentMethod: PaymentMethod
-  couponCode?: string
-  specialInstructions?: string
-  status: OrderStatus
-  placedAt: string
-  etaMinutes: number
-  assignedPartnerId?: string
-  assignedPartnerName?: string
+  role: string
 }
 
 export interface ApiResult<T> {

@@ -1,24 +1,23 @@
 version: "3.9"
 
-services:
-  postgres:
-    image: docker.io/library/postgres:16-alpine
-    container_name: spicyeat-postgres
-    environment:
-      POSTGRES_USER: spicyeat
-      POSTGRES_PASSWORD: spicyeat
-      POSTGRES_DB: spicyeat
-    ports:
-      - "5432:5432"
-    volumes:
-      - spicyeat-postgres-data:/var/lib/postgresql/data
-      - ./infrastructure/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U spicyeat"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+# Local infrastructure ONLY — Redis, Kafka.
+# Spring Boot services are intentionally NOT defined here: they run directly
+# on the host (mvn/jar), not inside Podman, to keep the Podman VM's 2GB RAM
+# free for infra containers only. See scripts/services.ps1 to run services.
+#
+# Postgres is NOT defined here either: this machine runs a native PostgreSQL
+# Windows service on port 5432, so the containerized Postgres from the
+# original full-stack compose was dropped to avoid a port conflict. The
+# spicyeat role + spicyeat_* databases (see
+# infrastructure/postgres/init-databases.sh for the list) were created once
+# directly on the native instance.
+#
+# Note: this file requires a compose provider (docker-compose or
+# podman-compose) on PATH. If you don't have one installed, use
+# scripts/infra.ps1 instead, which drives the same containers via plain
+# `podman run` and needs no extra tooling.
 
+services:
   redis:
     image: docker.io/library/redis:7-alpine
     container_name: spicyeat-redis
@@ -39,10 +38,12 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # Advertised as localhost, not "kafka", because Spring Boot services
+      # now run on the host, not in this compose network.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
@@ -50,200 +51,3 @@ services:
       interval: 10s
       timeout: 10s
       retries: 15
-
-  auth-service:
-    build:
-      context: .
-      dockerfile: auth-service/Containerfile
-    container_name: spicyeat-auth-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_auth
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please-32bytes+}
-      NOTIFICATION_SERVICE_URI: http://notification-service:8090
-      FRONTEND_RESET_PASSWORD_URL: ${FRONTEND_RESET_PASSWORD_URL:-http://localhost:5192/reset-password}
-    ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  user-service:
-    build:
-      context: .
-      dockerfile: user-service/Containerfile
-    container_name: spicyeat-user-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_user
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-    ports:
-      - "8082:8082"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  menu-service:
-    build:
-      context: .
-      dockerfile: menu-service/Containerfile
-    container_name: spicyeat-menu-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_menu
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    ports:
-      - "8083:8083"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  cart-service:
-    build:
-      context: .
-      dockerfile: cart-service/Containerfile
-    container_name: spicyeat-cart-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_cart
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      MENU_SERVICE_URI: http://menu-service:8083
-    ports:
-      - "8084:8084"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      menu-service:
-        condition: service_started
-
-  order-service:
-    build:
-      context: .
-      dockerfile: order-service/Containerfile
-    container_name: spicyeat-order-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_order
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      CART_SERVICE_URI: http://cart-service:8084
-      MENU_SERVICE_URI: http://menu-service:8083
-      USER_SERVICE_URI: http://user-service:8082
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    ports:
-      - "8085:8085"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      cart-service:
-        condition: service_started
-      menu-service:
-        condition: service_started
-      user-service:
-        condition: service_started
-
-  payment-service:
-    build:
-      context: .
-      dockerfile: payment-service/Containerfile
-    container_name: spicyeat-payment-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_payment
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_CURRENCY: ${STRIPE_CURRENCY:-inr}
-    ports:
-      - "8086:8086"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-
-  delivery-service:
-    build:
-      context: .
-      dockerfile: delivery-service/Containerfile
-    container_name: spicyeat-delivery-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_delivery
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      ORDER_SERVICE_URI: http://order-service:8085
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    ports:
-      - "8087:8087"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      order-service:
-        condition: service_started
-
-  notification-service:
-    build:
-      context: .
-      dockerfile: notification-service/Containerfile
-    container_name: spicyeat-notification-service
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/spicyeat_notification
-      DB_USERNAME: spicyeat
-      DB_PASSWORD: spicyeat
-      AUTH_SERVICE_URI: http://auth-service:8081
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_ADDRESS: ${RESEND_FROM_ADDRESS:-SpicyEat <onboarding@resend.dev>}
-    ports:
-      - "8090:8090"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      auth-service:
-        condition: service_started
-
-  api-gateway:
-    build:
-      context: .
-      dockerfile: api-gateway/Containerfile
-    container_name: spicyeat-api-gateway
-    environment:
-      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please-32bytes+}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5192}
-      AUTH_SERVICE_URI: http://auth-service:8081
-      USER_SERVICE_URI: http://user-service:8082
-      MENU_SERVICE_URI: http://menu-service:8083
-      CART_SERVICE_URI: http://cart-service:8084
-      ORDER_SERVICE_URI: http://order-service:8085
-      PAYMENT_SERVICE_URI: http://payment-service:8086
-      DELIVERY_SERVICE_URI: http://delivery-service:8087
-      NOTIFICATION_SERVICE_URI: http://notification-service:8090
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    ports:
-      - "8080:8080"
-    depends_on:
-      - auth-service
-      - user-service
-      - menu-service
-      - cart-service
-      - order-service
-      - payment-service
-      - delivery-service
-      - notification-service
-      - redis
-
-volumes:
-  spicyeat-postgres-data:

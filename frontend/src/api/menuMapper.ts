@@ -10,6 +10,13 @@ export const SPICE_LEVEL_FROM_BACKEND: Record<string, SpiceLevel> = {
   EXTRA_HOT: 4,
 }
 
+export const SPICE_LEVEL_TO_BACKEND: Record<SpiceLevel, string> = {
+  1: 'MILD',
+  2: 'MEDIUM',
+  3: 'HOT',
+  4: 'EXTRA_HOT',
+}
+
 const CATEGORY_CODE_TO_SLUG: Record<string, CategorySlug> = {
   BURGERS: 'burgers',
   FRIED_CHICKEN: 'fried-chicken',
@@ -19,6 +26,21 @@ const CATEGORY_CODE_TO_SLUG: Record<string, CategorySlug> = {
   PASTA: 'pasta',
   SIDES: 'sides',
   DESSERTS: 'desserts',
+}
+
+const CATEGORY_SLUG_TO_CODE: Record<CategorySlug, string> = {
+  burgers: 'BURGERS',
+  'fried-chicken': 'FRIED_CHICKEN',
+  pizza: 'PIZZA',
+  'wraps-rolls': 'WRAPS_ROLLS',
+  loaded: 'LOADED',
+  pasta: 'PASTA',
+  sides: 'SIDES',
+  desserts: 'DESSERTS',
+}
+
+export function categoryCodeFromSlug(slug: CategorySlug): string {
+  return CATEGORY_SLUG_TO_CODE[slug]
 }
 
 export interface MenuItemResponse {

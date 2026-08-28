@@ -27,3 +27,7 @@ export function createPayment(orderId: string, amount: number): Promise<PaymentR
 export function verifyPayment(paymentId: string): Promise<PaymentResponse> {
   return fetchApi<PaymentResponse>(`/api/payments/${paymentId}/verify`, { method: 'POST' })
 }
+
+export function fetchPaymentByOrder(orderId: string): Promise<PaymentResponse> {
+  return fetchApi<PaymentResponse>(`/api/payments/by-order/${orderId}`)
+}

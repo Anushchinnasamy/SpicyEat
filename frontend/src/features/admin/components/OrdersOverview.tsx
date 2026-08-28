@@ -1,4 +1,4 @@
-import type { Order } from '../../../types'
+import type { RealOrder } from '../../../api/realOrder'
 
 const SEGMENT_COLOR = {
   Delivered: '#4ADE80',
@@ -7,15 +7,19 @@ const SEGMENT_COLOR = {
   New: '#FBBF24',
 }
 
-export function OrdersOverview({ orders }: { orders: Order[] }) {
+export function OrdersOverview({ orders }: { orders: RealOrder[] }) {
   const total = orders.length
 
   const segments = [
     { label: 'Delivered' as const, count: orders.filter((o) => o.status === 'DELIVERED').length },
-    { label: 'Preparing' as const, count: orders.filter((o) => o.status === 'PREPARING' || o.status === 'READY').length },
+    {
+      label: 'Preparing' as const,
+      count: orders.filter((o) => o.status === 'PREPARING' || o.status === 'READY_FOR_PICKUP').length,
+    },
     {
       label: 'On the way' as const,
-      count: orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'OUT_FOR_DELIVERY').length,
+      count: orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'PICKED_UP' || o.status === 'OUT_FOR_DELIVERY')
+        .length,
     },
     { label: 'New' as const, count: orders.filter((o) => o.status === 'PLACED' || o.status === 'CONFIRMED').length },
   ]

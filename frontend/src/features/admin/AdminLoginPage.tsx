@@ -2,21 +2,33 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '../../components/forms/Input'
 import { Button } from '../../components/buttons/Button'
-import { useAdminAuthStore } from '../../state/adminAuthStore'
+import { login } from '../../api/auth'
+import { useAuthStore } from '../../state/authStore'
 
 export function AdminLoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const login = useAdminAuthStore((s) => s.login)
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 400))
-    login(email.split('@')[0] || 'Admin')
-    navigate('/admin')
+    setError(null)
+    try {
+      const { data: user } = await login({ email, password })
+      if (user.role !== 'ADMIN') {
+        useAuthStore.getState().logout()
+        setError('That account does not have admin access.')
+        return
+      }
+      navigate('/admin')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid email or password')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -52,13 +64,14 @@ export function AdminLoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          {error && <p className="text-sm text-chili-red">{error}</p>}
           <Button type="submit" disabled={loading} className="mt-2 w-full justify-center">
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-ink">
-          Any email/password works in this demo. Not a customer login —{' '}
+          Requires an account with the ADMIN role —{' '}
           <a href="/login" className="font-semibold text-sun-orange hover:underline">
             go to customer login
           </a>

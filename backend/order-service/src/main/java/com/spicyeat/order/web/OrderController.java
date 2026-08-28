@@ -40,6 +40,19 @@ public class OrderController {
         return orderService.listOrders(userId).stream().map(this::toResponse).toList();
     }
 
+    @GetMapping("/admin")
+    public List<OrderResponse> listAllOrders(HttpServletRequest request) {
+        CurrentUser.requireRole(request, Role.ADMIN);
+        return orderService.listAllOrders().stream().map(this::toResponse).toList();
+    }
+
+    /** Internal-only: lets other services (e.g. delivery-service) enrich their own views with order details. */
+    @GetMapping("/internal/{id}")
+    public OrderResponse getOrderInternal(HttpServletRequest request, @PathVariable UUID id) {
+        CurrentUser.requireRole(request, Role.ADMIN);
+        return toResponse(orderService.getOrderById(id));
+    }
+
     @GetMapping("/{id}")
     public OrderResponse getOrder(HttpServletRequest request, @PathVariable UUID id) {
         UUID userId = CurrentUser.userId(request);

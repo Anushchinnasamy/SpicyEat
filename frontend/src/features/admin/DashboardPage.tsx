@@ -8,10 +8,11 @@ import { RevenueOverview } from './components/RevenueOverview'
 import { OrdersOverview } from './components/OrdersOverview'
 import { DeliveryStatus } from './components/DeliveryStatus'
 import { LoadingState } from '../../components/feedback/States'
-import { fetchDashboardMetrics, type DashboardMetrics } from '../../api/admin'
-import { fetchOrders } from '../../api/orders'
+import { fetchAllOrdersAdmin, type RealOrder } from '../../api/realOrder'
+import { listUsers } from '../../api/adminUsers'
+import { fetchMenu } from '../../api/menu'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
-import type { Order } from '../../types'
+import type { Food } from '../../types'
 
 function compareText(today: number, yesterday: number, unit: (n: number) => string) {
   if (yesterday === 0) {
@@ -23,21 +24,46 @@ function compareText(today: number, yesterday: number, unit: (n: number) => stri
 }
 
 export function DashboardPage() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [orders, setOrders] = useState<Order[] | null>(null)
+  const [orders, setOrders] = useState<RealOrder[] | null>(null)
+  const [customerCount, setCustomerCount] = useState<number | null>(null)
+  const [menu, setMenu] = useState<Food[]>([])
   const reducedMotion = useReducedMotion()
 
   useEffect(() => {
-    fetchDashboardMetrics().then((res) => setMetrics(res.data))
-    fetchOrders().then((res) => setOrders(res.data))
+    fetchAllOrdersAdmin().then(setOrders).catch(() => setOrders([]))
+    listUsers()
+      .then((users) => setCustomerCount(users.filter((u) => u.role === 'CUSTOMER').length))
+      .catch(() => setCustomerCount(0))
+    fetchMenu().then((res) => setMenu(res.data)).catch(() => setMenu([]))
   }, [])
 
+  const today = new Date().toDateString()
   const yesterday = new Date(Date.now() - 86400000).toDateString()
-  const ordersYesterday = orders?.filter((o) => new Date(o.placedAt).toDateString() === yesterday).length ?? 0
-  const revenueYesterday =
-    orders
-      ?.filter((o) => new Date(o.placedAt).toDateString() === yesterday)
-      .reduce((s, o) => s + o.total, 0) ?? 0
+
+  const ordersToday = orders?.filter((o) => new Date(o.createdAt).toDateString() === today) ?? []
+  const ordersYesterdayList = orders?.filter((o) => new Date(o.createdAt).toDateString() === yesterday) ?? []
+  const revenueToday = ordersToday.reduce((s, o) => s + o.total, 0)
+  const revenueYesterday = ordersYesterdayList.reduce((s, o) => s + o.total, 0)
+
+  const activeOrders = orders?.filter((o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED') ?? []
+  const prepQueue = orders?.filter((o) => o.status === 'CONFIRMED' || o.status === 'PREPARING').length ?? 0
+  const activeDeliveries =
+    orders?.filter((o) => o.status === 'ASSIGNED' || o.status === 'PICKED_UP' || o.status === 'OUT_FOR_DELIVERY').length ?? 0
+
+  const menuById = new Map(menu.map((f) => [f.id, f]))
+  const itemCounts = new Map<string, { name: string; image: string; orders: number; price: number }>()
+  for (const order of orders ?? []) {
+    for (const item of order.items) {
+      const existing = itemCounts.get(item.menuItemId)
+      const image = menuById.get(item.menuItemId)?.images[0] ?? ''
+      if (existing) {
+        existing.orders += item.quantity
+      } else {
+        itemCounts.set(item.menuItemId, { name: item.itemName, image, orders: item.quantity, price: item.unitPrice })
+      }
+    }
+  }
+  const popularItems = [...itemCounts.values()].sort((a, b) => b.orders - a.orders).slice(0, 5)
 
   const kpiContainer = {
     hidden: {},
@@ -50,7 +76,7 @@ export function DashboardPage() {
 
   return (
     <AdminLayout title="Dashboard 👋" subtitle="Here's what's happening with your restaurant today.">
-      {!metrics || !orders ? (
+      {!orders || customerCount === null ? (
         <LoadingState />
       ) : (
         <>
@@ -64,9 +90,9 @@ export function DashboardPage() {
               <KpiCard
                 icon="🧾"
                 label="Orders Today"
-                value={String(metrics.ordersToday)}
-                changeText={compareText(metrics.ordersToday, ordersYesterday, (n) => `${n} orders`)}
-                changeType={metrics.ordersToday >= ordersYesterday ? 'up' : 'down'}
+                value={String(ordersToday.length)}
+                changeText={compareText(ordersToday.length, ordersYesterdayList.length, (n) => `${n} orders`)}
+                changeType={ordersToday.length >= ordersYesterdayList.length ? 'up' : 'down'}
                 accent
               />
             </motion.div>
@@ -74,9 +100,9 @@ export function DashboardPage() {
               <KpiCard
                 icon="💰"
                 label="Revenue Today"
-                value={`₹${metrics.revenueToday.toLocaleString()}`}
-                changeText={compareText(metrics.revenueToday, revenueYesterday, (n) => `₹${n}`)}
-                changeType={metrics.revenueToday >= revenueYesterday ? 'up' : 'down'}
+                value={`₹${revenueToday.toLocaleString()}`}
+                changeText={compareText(revenueToday, revenueYesterday, (n) => `₹${n}`)}
+                changeType={revenueToday >= revenueYesterday ? 'up' : 'down'}
                 accent
               />
             </motion.div>
@@ -84,23 +110,18 @@ export function DashboardPage() {
               <KpiCard
                 icon="⏱️"
                 label="Active Orders"
-                value={String(metrics.activeOrders)}
-                changeText={`${metrics.prepQueue} preparing · ${metrics.activeDeliveries} on the way`}
+                value={String(activeOrders.length)}
+                changeText={`${prepQueue} preparing · ${activeDeliveries} on the way`}
               />
             </motion.div>
             <motion.div variants={kpiItem}>
-              <KpiCard
-                icon="👨‍🍳"
-                label="Prep Queue"
-                value={String(metrics.prepQueue)}
-                changeText="Avg. prep time ~18m"
-              />
+              <KpiCard icon="👨‍🍳" label="Prep Queue" value={String(prepQueue)} changeText="Confirmed + preparing" />
             </motion.div>
             <motion.div variants={kpiItem}>
               <KpiCard
                 icon="🛵"
                 label="Active Deliveries"
-                value={String(metrics.activeDeliveries)}
+                value={String(activeDeliveries)}
                 changeText="Live orders on the way"
               />
             </motion.div>
@@ -108,7 +129,7 @@ export function DashboardPage() {
               <KpiCard
                 icon="👥"
                 label="Customers"
-                value={metrics.customers.toLocaleString()}
+                value={customerCount.toLocaleString()}
                 changeText="Registered customers"
               />
             </motion.div>
@@ -121,7 +142,7 @@ export function DashboardPage() {
             className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]"
           >
             <RecentOrders orders={orders.slice(0, 6)} />
-            <PopularItems items={metrics.popularItems} />
+            <PopularItems items={popularItems} />
           </motion.div>
 
           <motion.div

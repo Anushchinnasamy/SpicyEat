@@ -12,6 +12,7 @@ import com.spicyeat.auth.security.PasswordResetService;
 import com.spicyeat.auth.security.RefreshTokenService;
 import com.spicyeat.auth.web.dto.AuthResponse;
 import com.spicyeat.auth.web.dto.MeResponse;
+import com.spicyeat.auth.web.dto.UserSummaryResponse;
 import com.spicyeat.auth.web.dto.UserView;
 import com.spicyeat.common.error.ApiException;
 import com.spicyeat.common.security.Role;
@@ -22,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -108,6 +110,13 @@ public class AuthService {
         return new UserView(credential.getId(), credential.getEmail(), credential.getRole());
     }
 
+    @Transactional(readOnly = true)
+    public List<UserSummaryResponse> listUsers() {
+        return userCredentialRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(UserSummaryResponse::from)
+                .toList();
+    }
+
     /**
      * Always succeeds from the caller's point of view, whether or not the
      * email is registered — telling the caller "no such account" would let
@@ -133,6 +142,18 @@ public class AuthService {
         PasswordResetToken token = passwordResetService.consume(rawToken);
         UserCredential credential = userCredentialRepository.findById(token.getUserId())
                 .orElseThrow(() -> ApiException.badRequest("Invalid or expired reset link"));
+        credential.setPasswordHash(passwordEncoder.encode(newPassword));
+        userCredentialRepository.save(credential);
+        refreshTokenService.revokeAllForUser(credential.getId());
+    }
+
+    @Transactional
+    public void changePassword(UUID userId, String currentPassword, String newPassword) {
+        UserCredential credential = userCredentialRepository.findById(userId)
+                .orElseThrow(() -> ApiException.unauthorized("Missing authenticated user context"));
+        if (!passwordEncoder.matches(currentPassword, credential.getPasswordHash())) {
+            throw ApiException.badRequest("Current password is incorrect");
+        }
         credential.setPasswordHash(passwordEncoder.encode(newPassword));
         userCredentialRepository.save(credential);
         refreshTokenService.revokeAllForUser(credential.getId());

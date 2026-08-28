@@ -1,3 +1,5 @@
 .idea/
 *.iml
 NUL
+backend/.env.local
+.run/

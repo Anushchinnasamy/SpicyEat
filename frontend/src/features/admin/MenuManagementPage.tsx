@@ -17,13 +17,11 @@ import type { CategorySlug, Food, SpiceLevel } from '../../types'
 
 const EMPTY_FORM: FoodInput = {
   name: '',
-  tagline: '',
   description: '',
   categorySlug: 'burgers',
   price: 0,
   spiceLevel: 1,
   isVeg: false,
-  bestseller: false,
   image: '',
 }
 
@@ -67,13 +65,11 @@ export function MenuManagementPage() {
   function openEdit(food: Food) {
     setForm({
       name: food.name,
-      tagline: food.tagline,
       description: food.description,
       categorySlug: food.categorySlug,
       price: food.price,
       spiceLevel: food.spiceLevel,
       isVeg: food.isVeg,
-      bestseller: food.bestseller,
       image: food.images[0] ?? '',
     })
     setEditing(food)
@@ -224,13 +220,6 @@ export function MenuManagementPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
-            <Input
-              variant="dark"
-              label="Tagline"
-              required
-              value={form.tagline}
-              onChange={(e) => setForm({ ...form, tagline: e.target.value })}
-            />
             <label className="flex flex-col gap-1.5 text-left">
               <span className="text-xs font-semibold uppercase tracking-wide text-admin-text2">Description</span>
               <textarea
@@ -298,15 +287,6 @@ export function MenuManagementPage() {
                   className="h-4 w-4 accent-admin-success"
                 />
                 Vegetarian
-              </label>
-              <label className="flex items-center gap-2 text-sm font-medium text-admin-text2">
-                <input
-                  type="checkbox"
-                  checked={form.bestseller}
-                  onChange={(e) => setForm({ ...form, bestseller: e.target.checked })}
-                  className="h-4 w-4 accent-admin-orange"
-                />
-                Bestseller
               </label>
             </div>
 

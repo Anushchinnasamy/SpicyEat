@@ -49,6 +49,7 @@ spicyeat:
     cart-uri: ${CART_SERVICE_URI:http://localhost:8084}
     menu-uri: ${MENU_SERVICE_URI:http://localhost:8083}
     user-uri: ${USER_SERVICE_URI:http://localhost:8082}
+    payment-uri: ${PAYMENT_SERVICE_URI:http://localhost:8086}
 
   kafka:
     order-topic: ${ORDER_EVENTS_TOPIC:spicyeat.order.events}

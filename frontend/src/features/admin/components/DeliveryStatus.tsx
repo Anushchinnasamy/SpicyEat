@@ -1,16 +1,15 @@
 import { motion } from 'framer-motion'
 import { useReducedMotion } from '../../../hooks/useReducedMotion'
-import type { Order } from '../../../types'
+import type { RealOrder } from '../../../api/realOrder'
 
-export function DeliveryStatus({ orders }: { orders: Order[] }) {
+export function DeliveryStatus({ orders }: { orders: RealOrder[] }) {
   const reducedMotion = useReducedMotion()
 
-  const onTheWay = orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'OUT_FOR_DELIVERY').length
+  const onTheWay = orders.filter((o) => o.status === 'ASSIGNED' || o.status === 'PICKED_UP' || o.status === 'OUT_FOR_DELIVERY').length
   const pending = orders.filter((o) =>
-    ['PLACED', 'CONFIRMED', 'PREPARING', 'READY'].includes(o.status),
+    ['PLACED', 'CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP'].includes(o.status),
   ).length
-  const active = orders.filter((o) => o.status !== 'DELIVERED')
-  const avgEta = active.length ? Math.round(active.reduce((s, o) => s + o.etaMinutes, 0) / active.length) : null
+  const delivered = orders.filter((o) => o.status === 'DELIVERED').length
 
   return (
     <div className="rounded-2xl border border-admin-border bg-admin-card p-5 sm:p-6">
@@ -75,8 +74,8 @@ export function DeliveryStatus({ orders }: { orders: Order[] }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-text2">Pending</p>
         </div>
         <div>
-          <p className="text-xl font-bold text-admin-text">{avgEta ? `${avgEta}m` : '—'}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-text2">Avg. Delivery Time</p>
+          <p className="text-xl font-bold text-admin-text">{delivered}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-admin-text2">Delivered</p>
         </div>
       </div>
     </div>

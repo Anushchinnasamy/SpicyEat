@@ -1,68 +1,106 @@
 import { useEffect, useState } from 'react'
 import { AdminLayout } from './AdminLayout'
 import { Modal } from '../../components/layout/Modal'
-import { ConfirmDialog } from '../../components/layout/ConfirmDialog'
 import { Button } from '../../components/buttons/Button'
 import { Input } from '../../components/forms/Input'
 import { LoadingState, EmptyState } from '../../components/feedback/States'
-import { fetchOrders, updateOrderStatus, updateOrder, deleteOrder, type OrderEditInput } from '../../api/orders'
-import type { DeliveryOption, Order, OrderAddress, OrderStatus, PaymentMethod } from '../../types'
+import { toast } from '../../state/toastStore'
+import { fetchAllOrdersAdmin, updateOrderStatusAdmin, cancelOrder, type RealOrder, type RealOrderStatus } from '../../api/realOrder'
+import { fetchPaymentByOrder, refundPayment, type PaymentResponse } from '../../api/adminPayments'
 
-const STATUSES: OrderStatus[] = [
+const STATUSES: RealOrderStatus[] = [
   'PLACED',
   'CONFIRMED',
   'PREPARING',
-  'READY',
+  'READY_FOR_PICKUP',
   'ASSIGNED',
+  'PICKED_UP',
   'OUT_FOR_DELIVERY',
   'DELIVERED',
+  'CANCELLED',
 ]
 
-const EMPTY_ADDRESS: OrderAddress = { name: '', phone: '', line1: '', city: '', pincode: '' }
-
 export function OrdersPage() {
-  const [orders, setOrders] = useState<Order[] | null>(null)
-  const [editing, setEditing] = useState<Order | null>(null)
-  const [address, setAddress] = useState<OrderAddress>(EMPTY_ADDRESS)
-  const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>('standard')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card')
-  const [deleting, setDeleting] = useState<Order | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [orders, setOrders] = useState<RealOrder[] | null>(null)
+  const [cancelling, setCancelling] = useState<RealOrder | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const [refunding, setRefunding] = useState<RealOrder | null>(null)
+  const [payment, setPayment] = useState<PaymentResponse | null | undefined>(undefined)
+  const [refundAmount, setRefundAmount] = useState(0)
+  const [refundReason, setRefundReason] = useState('')
 
   function load() {
-    fetchOrders().then((res) => setOrders(res.data))
+    fetchAllOrdersAdmin()
+      .then(setOrders)
+      .catch(() => {
+        setOrders([])
+        toast.error('Could not load orders')
+      })
   }
 
   useEffect(load, [])
 
-  async function handleStatusChange(id: string, status: OrderStatus) {
+  async function handleStatusChange(id: string, status: RealOrderStatus) {
+    const previous = orders
     setOrders((prev) => prev && prev.map((o) => (o.id === id ? { ...o, status } : o)))
-    await updateOrderStatus(id, status)
+    try {
+      await updateOrderStatusAdmin(id, status)
+      toast.success('Order status updated')
+    } catch {
+      setOrders(previous)
+      toast.error('Could not update order status')
+    }
   }
 
-  function openEdit(order: Order) {
-    setAddress(order.address)
-    setDeliveryOption(order.deliveryOption)
-    setPaymentMethod(order.paymentMethod)
-    setEditing(order)
+  async function handleCancel() {
+    if (!cancelling) return
+    setBusy(true)
+    try {
+      await cancelOrder(cancelling.id, cancelReason || undefined)
+      toast.success('Order cancelled')
+      setCancelling(null)
+      setCancelReason('')
+      load()
+    } catch {
+      toast.error('Could not cancel that order')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  async function handleSave(e: React.FormEvent) {
+  async function openRefund(order: RealOrder) {
+    setRefunding(order)
+    setPayment(undefined)
+    try {
+      const p = await fetchPaymentByOrder(order.id)
+      setPayment(p)
+      setRefundAmount(p.amount - p.refundedAmount)
+    } catch {
+      setPayment(null)
+    }
+  }
+
+  async function handleRefund(e: React.FormEvent) {
     e.preventDefault()
-    if (!editing) return
-    setSaving(true)
-    const input: OrderEditInput = { address, deliveryOption, paymentMethod }
-    await updateOrder(editing.id, input)
-    setSaving(false)
-    setEditing(null)
-    load()
-  }
-
-  async function handleDelete() {
-    if (!deleting) return
-    await deleteOrder(deleting.id)
-    setDeleting(null)
-    load()
+    if (!payment || !refunding) return
+    setBusy(true)
+    try {
+      await refundPayment(payment.id, refundAmount, refundReason || undefined)
+      const isFullRefund = refundAmount >= payment.amount - payment.refundedAmount
+      if (isFullRefund && refunding.status !== 'CANCELLED') {
+        await cancelOrder(refunding.id, refundReason || 'Refunded')
+      }
+      toast.success('Refund issued')
+      setRefunding(null)
+      setRefundReason('')
+      load()
+    } catch {
+      toast.error('Could not issue that refund')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -86,15 +124,15 @@ export function OrdersPage() {
             <tbody className="divide-y divide-admin-border">
               {orders.map((order) => (
                 <tr key={order.id} className="transition-colors hover:bg-white/[0.03]">
-                  <td className="px-5 py-4 font-semibold text-admin-text">{order.id}</td>
-                  <td className="px-5 py-4 text-admin-text">{order.address.name}</td>
+                  <td className="px-5 py-4 font-semibold text-admin-text">{order.id.slice(0, 8)}</td>
+                  <td className="px-5 py-4 text-admin-text2">{order.userId.slice(0, 8)}</td>
                   <td className="px-5 py-4 text-admin-text2">{order.items.length} items</td>
                   <td className="px-5 py-4 font-semibold text-admin-text">₹{order.total}</td>
-                  <td className="px-5 py-4 text-admin-text2">{new Date(order.placedAt).toLocaleString()}</td>
+                  <td className="px-5 py-4 text-admin-text2">{new Date(order.createdAt).toLocaleString()}</td>
                   <td className="px-5 py-4">
                     <select
                       value={order.status}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value as OrderStatus)}
+                      onChange={(e) => handleStatusChange(order.id, e.target.value as RealOrderStatus)}
                       className="rounded-full border border-admin-border bg-admin-bg2 px-3 py-1.5 text-xs font-semibold text-admin-text"
                     >
                       {STATUSES.map((s) => (
@@ -108,17 +146,19 @@ export function OrdersPage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => openEdit(order)}
-                        className="rounded-full border border-admin-border px-3 py-1 text-xs font-semibold text-admin-text2 transition-colors hover:border-admin-orange hover:text-admin-orange-bright"
+                        disabled={order.status === 'CANCELLED'}
+                        onClick={() => openRefund(order)}
+                        className="rounded-full border border-admin-border px-3 py-1 text-xs font-semibold text-admin-text2 transition-colors hover:border-admin-orange hover:text-admin-orange-bright disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        Edit
+                        Refund
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDeleting(order)}
-                        className="rounded-full border border-admin-border px-3 py-1 text-xs font-semibold text-admin-danger transition-colors hover:border-admin-danger"
+                        disabled={order.status === 'CANCELLED'}
+                        onClick={() => setCancelling(order)}
+                        className="rounded-full border border-admin-border px-3 py-1 text-xs font-semibold text-admin-danger transition-colors hover:border-admin-danger disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        Delete
+                        Cancel
                       </button>
                     </div>
                   </td>
@@ -129,90 +169,70 @@ export function OrdersPage() {
         </div>
       )}
 
-      {editing && (
-        <Modal title={`Edit ${editing.id}`} onClose={() => setEditing(null)}>
-          <form onSubmit={handleSave} className="flex flex-col gap-4">
+      {cancelling && (
+        <Modal title={`Cancel order ${cancelling.id.slice(0, 8)}`} onClose={() => setCancelling(null)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-admin-text2">This calls the real order-service cancel endpoint. Optionally give a reason.</p>
             <Input
               variant="dark"
-              label="Customer name"
-              required
-              value={address.name}
-              onChange={(e) => setAddress({ ...address, name: e.target.value })}
+              label="Reason (optional)"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
             />
-            <Input
-              variant="dark"
-              label="Phone"
-              required
-              value={address.phone}
-              onChange={(e) => setAddress({ ...address, phone: e.target.value })}
-            />
-            <Input
-              variant="dark"
-              label="Address"
-              required
-              value={address.line1}
-              onChange={(e) => setAddress({ ...address, line1: e.target.value })}
-            />
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-              variant="dark"
-                label="City"
-                required
-                value={address.city}
-                onChange={(e) => setAddress({ ...address, city: e.target.value })}
-              />
-              <Input
-              variant="dark"
-                label="Pincode"
-                required
-                value={address.pincode}
-                onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-admin-text2">Delivery</span>
-                <select
-                  value={deliveryOption}
-                  onChange={(e) => setDeliveryOption(e.target.value as DeliveryOption)}
-                  className="rounded-2xl border border-admin-border bg-admin-bg2 px-4 py-3 text-sm text-admin-text"
-                >
-                  <option value="standard">Standard</option>
-                  <option value="express">Express</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-admin-text2">Payment</span>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="rounded-2xl border border-admin-border bg-admin-bg2 px-4 py-3 text-sm text-admin-text"
-                >
-                  <option value="card">Card</option>
-                  <option value="upi">UPI</option>
-                  <option value="cod">Cash on delivery</option>
-                </select>
-              </label>
-            </div>
-            <div className="mt-2 flex justify-end gap-3">
-              <Button type="button" variant="outline-dark" onClick={() => setEditing(null)}>
-                Cancel
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline-dark" onClick={() => setCancelling(null)}>
+                Back
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Changes'}
+              <Button
+                type="button"
+                onClick={handleCancel}
+                disabled={busy}
+                className="!bg-admin-danger hover:!bg-admin-danger/90"
+              >
+                {busy ? 'Cancelling...' : 'Cancel order'}
               </Button>
             </div>
-          </form>
+          </div>
         </Modal>
       )}
 
-      {deleting && (
-        <ConfirmDialog
-          title="Delete order"
-          message={`Permanently delete order ${deleting.id}? This can't be undone.`}
-          onCancel={() => setDeleting(null)}
-          onConfirm={handleDelete}
-        />
+      {refunding && (
+        <Modal title={`Refund order ${refunding.id.slice(0, 8)}`} onClose={() => setRefunding(null)}>
+          {payment === undefined && <LoadingState title="Looking up payment..." />}
+          {payment === null && <p className="text-sm text-admin-danger">No payment found for this order.</p>}
+          {payment && (
+            <form onSubmit={handleRefund} className="flex flex-col gap-4">
+              <p className="text-sm text-admin-text2">
+                Paid ₹{payment.amount} · already refunded ₹{payment.refundedAmount}
+              </p>
+              <Input
+                variant="dark"
+                type="number"
+                label="Refund amount (₹)"
+                required
+                min={0.01}
+                max={payment.amount - payment.refundedAmount}
+                step="0.01"
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(Number(e.target.value))}
+              />
+              <Input
+                variant="dark"
+                label="Reason (optional)"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+              />
+              <div className="flex justify-end gap-3">
+                <Button type="button" variant="outline-dark" onClick={() => setRefunding(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy}>
+                  {busy ? 'Processing...' : 'Issue refund'}
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
       )}
     </AdminLayout>
   )

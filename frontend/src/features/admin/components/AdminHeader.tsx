@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useReducedMotion } from '../../../hooks/useReducedMotion'
-import { useAdminAuthStore } from '../../../state/adminAuthStore'
+import { useAuthStore } from '../../../state/authStore'
 import { ConfirmDialog } from '../../../components/layout/ConfirmDialog'
 
 function ProfileMenu({ adminName, onLogout }: { adminName: string | null; onLogout: () => void }) {
@@ -81,7 +81,7 @@ export function AdminHeader({
   onToggleSidebar: () => void
   onLogout: () => void
 }) {
-  const adminName = useAdminAuthStore((s) => s.adminName)
+  const adminName = useAuthStore((s) => s.user?.name ?? null)
   const reducedMotion = useReducedMotion()
 
   return (

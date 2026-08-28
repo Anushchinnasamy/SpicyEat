@@ -31,3 +31,7 @@ export function createAddress(input: AddressInput): Promise<AddressResponse> {
     body: JSON.stringify(input),
   })
 }
+
+export function deleteAddress(id: string): Promise<void> {
+  return fetchApi<void>(`/api/users/me/addresses/${id}`, { method: 'DELETE' })
+}

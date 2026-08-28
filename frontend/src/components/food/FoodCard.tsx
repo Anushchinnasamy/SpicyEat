@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Food } from '../../types'
+import { useFavouritesStore } from '../../state/favouritesStore'
 import { SpiceIndicator } from './SpiceIndicator'
 import { VegBadge } from './VegBadge'
 
@@ -9,6 +10,9 @@ interface Props {
 }
 
 export function FoodCard({ food, onQuickAdd }: Props) {
+  const isFavourite = useFavouritesStore((s) => s.ids.has(food.id))
+  const toggleFavourite = useFavouritesStore((s) => s.toggle)
+
   return (
     <Link
       to={`/menu/${food.slug}`}
@@ -26,8 +30,19 @@ export function FoodCard({ food, onQuickAdd }: Props) {
             Bestseller
           </span>
         )}
-        <span className="absolute right-3 top-3">
+        <span className="absolute right-3 top-3 flex flex-col items-end gap-2">
           <VegBadge isVeg={food.isVeg} />
+          <button
+            type="button"
+            aria-label={isFavourite ? `Remove ${food.name} from favourites` : `Add ${food.name} to favourites`}
+            onClick={(e) => {
+              e.preventDefault()
+              toggleFavourite(food.id, food.name)
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-sm shadow-sm backdrop-blur transition-transform hover:scale-110"
+          >
+            {isFavourite ? '❤️' : '🤍'}
+          </button>
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">

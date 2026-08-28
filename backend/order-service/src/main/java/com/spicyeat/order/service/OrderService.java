@@ -27,6 +27,9 @@ public class OrderService {
     private final CartServiceClient cartServiceClient;
     private final ResilientDependencyClient resilientDependencyClient;
     private final OutboxRecorder outboxRecorder;
+    private final PaymentServiceClient paymentServiceClient;
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(OrderService.class);
 
     public OrderService(
             OrderRepository orderRepository,
@@ -35,7 +38,8 @@ public class OrderService {
             OrderStatusHistoryRepository orderStatusHistoryRepository,
             CartServiceClient cartServiceClient,
             ResilientDependencyClient resilientDependencyClient,
-            OutboxRecorder outboxRecorder
+            OutboxRecorder outboxRecorder,
+            PaymentServiceClient paymentServiceClient
     ) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -44,6 +48,7 @@ public class OrderService {
         this.cartServiceClient = cartServiceClient;
         this.resilientDependencyClient = resilientDependencyClient;
         this.outboxRecorder = outboxRecorder;
+        this.paymentServiceClient = paymentServiceClient;
     }
 
     @Transactional
@@ -143,8 +148,20 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public List<Order> listAllOrders() {
+        return orderRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    @Transactional(readOnly = true)
     public Order getOrder(UUID userId, UUID orderId) {
         return orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+    }
+
+    /** Internal-only: no owner check, used by other services (e.g. delivery-service) to enrich their own views. */
+    @Transactional(readOnly = true)
+    public Order getOrderById(UUID orderId) {
+        return orderRepository.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Order not found"));
     }
 
@@ -180,7 +197,17 @@ public class OrderService {
         orderRepository.save(order);
         orderStatusHistoryRepository.save(new OrderStatusHistory(order.getId(), OrderStatus.CANCELLED, reason));
         publishStatusEvent(order, OrderStatus.CANCELLED, null);
+        refundIfPaid(order.getId());
         return order;
+    }
+
+    /** Best-effort: a cancelled order should never fail to cancel just because the refund call hiccupped. */
+    private void refundIfPaid(UUID orderId) {
+        try {
+            paymentServiceClient.refundByOrder(orderId);
+        } catch (Exception e) {
+            log.error("Failed to auto-refund payment for cancelled order {}", orderId, e);
+        }
     }
 
     @Transactional

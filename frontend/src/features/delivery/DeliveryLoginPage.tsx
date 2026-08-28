@@ -2,28 +2,33 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '../../components/forms/Input'
 import { Button } from '../../components/buttons/Button'
-import { useDeliveryAuthStore } from '../../state/deliveryAuthStore'
-
-function slugify(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-}
+import { login } from '../../api/auth'
+import { useAuthStore } from '../../state/authStore'
 
 export function DeliveryLoginPage() {
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const login = useDeliveryAuthStore((s) => s.login)
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 400))
-    login(`partner-${slugify(name) || 'rider'}`, name || 'Rider')
-    navigate('/delivery')
+    setError(null)
+    try {
+      const { data: user } = await login({ email, password })
+      if (user.role !== 'DELIVERY_PARTNER') {
+        useAuthStore.getState().logout()
+        setError('That account is not registered as a delivery partner.')
+        return
+      }
+      navigate('/delivery')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid email or password')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -40,29 +45,33 @@ export function DeliveryLoginPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
           <Input
-            icon="👤"
+            icon="✉️"
+            type="email"
             required
-            placeholder="Your name"
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            placeholder="rider@spicyeat.com"
+            label="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
           <Input
-            icon="📱"
-            type="tel"
+            icon="🔒"
+            type="password"
             required
-            placeholder="Phone number"
-            label="Phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            minLength={8}
+            maxLength={100}
+            placeholder="Password"
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
+          {error && <p className="text-sm text-chili-red">{error}</p>}
           <Button type="submit" disabled={loading} className="mt-2 w-full justify-center">
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-muted-ink">
-          Any name/phone works in this demo. Not a customer login —{' '}
+          Requires an account with the DELIVERY_PARTNER role —{' '}
           <a href="/login" className="font-semibold text-sun-orange hover:underline">
             go to customer login
           </a>

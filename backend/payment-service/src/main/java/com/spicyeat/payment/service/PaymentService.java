@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -86,6 +87,39 @@ public class PaymentService {
     public Payment getPayment(UUID userId, UUID paymentId) {
         return paymentRepository.findByIdAndUserId(paymentId, userId)
                 .orElseThrow(() -> ApiException.notFound("Payment not found"));
+    }
+
+    /** Admins can look up any order's payment; everyone else only their own. */
+    public Payment getPaymentByOrder(UUID orderId, UUID callerUserId, boolean isAdmin) {
+        Payment payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(orderId)
+                .orElseThrow(() -> ApiException.notFound("No payment found for that order"));
+        if (!isAdmin && !payment.getUserId().equals(callerUserId)) {
+            throw ApiException.notFound("No payment found for that order");
+        }
+        return payment;
+    }
+
+    /**
+     * Called by order-service when a customer cancels an order: refunds
+     * whatever remains on that order's payment in full, automatically. A
+     * no-op (not an error) if there's no payment yet, or nothing left to
+     * refund — cancellation shouldn't fail just because there was no charge.
+     */
+    @Transactional
+    public Optional<Payment> refundFullyByOrder(UUID orderId) {
+        Optional<Payment> maybePayment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(orderId);
+        if (maybePayment.isEmpty()) {
+            return Optional.empty();
+        }
+        Payment payment = maybePayment.get();
+        if (payment.getStatus() != PaymentStatus.SUCCESS && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+            return Optional.of(payment);
+        }
+        BigDecimal remaining = payment.getAmount().subtract(payment.getRefundedAmount());
+        if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+            return Optional.of(payment);
+        }
+        return Optional.of(refund(payment.getId(), remaining, "Order cancelled"));
     }
 
     @Transactional

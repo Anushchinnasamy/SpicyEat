@@ -22,6 +22,8 @@ public interface DeliveryRepository extends JpaRepository<Delivery, UUID> {
 
     Optional<Delivery> findByIdAndPartnerId(UUID id, UUID partnerId);
 
+    long countByPartnerIdAndStatus(UUID partnerId, DeliveryStatus status);
+
     /**
      * Atomically claims a delivery only if it is still UNASSIGNED. When two
      * partners race to accept the same delivery, exactly one UPDATE affects

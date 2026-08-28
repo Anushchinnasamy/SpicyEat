@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
-import { useDeliveryAuthStore } from '../../state/deliveryAuthStore'
+import { useEffect, useState } from 'react'
+import { useAuthStore } from '../../state/authStore'
+import { performLogout } from '../../api/auth'
+import { fetchPartnerProfile, setPartnerOnline } from '../../api/deliveryProfile'
 import { ConfirmDialog } from '../../components/layout/ConfirmDialog'
 
 const TABS = [
@@ -13,15 +15,27 @@ const TABS = [
 ]
 
 export function DeliveryLayout({ title, children }: { title: string; children: ReactNode }) {
-  const partnerName = useDeliveryAuthStore((s) => s.partnerName)
-  const online = useDeliveryAuthStore((s) => s.online)
-  const setOnline = useDeliveryAuthStore((s) => s.setOnline)
-  const logout = useDeliveryAuthStore((s) => s.logout)
+  const partnerName = useAuthStore((s) => s.user?.name ?? null)
+  const [online, setOnlineState] = useState(false)
   const navigate = useNavigate()
   const [confirmingLogout, setConfirmingLogout] = useState(false)
 
-  function handleLogout() {
-    logout()
+  useEffect(() => {
+    fetchPartnerProfile().then((p) => setOnlineState(p.online)).catch(() => {})
+  }, [])
+
+  async function toggleOnline() {
+    const next = !online
+    setOnlineState(next)
+    try {
+      await setPartnerOnline(next)
+    } catch {
+      setOnlineState(!next)
+    }
+  }
+
+  async function handleLogout() {
+    await performLogout()
     navigate('/delivery/login')
   }
 
@@ -39,7 +53,7 @@ export function DeliveryLayout({ title, children }: { title: string; children: R
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setOnline(!online)}
+            onClick={toggleOnline}
             className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors ${
               online
                 ? 'border-admin-success/30 bg-admin-success/15 text-admin-success'

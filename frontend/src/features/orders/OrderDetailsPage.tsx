@@ -4,10 +4,23 @@ import { motion } from 'framer-motion'
 import { PageShell } from '../../components/layout/PageShell'
 import { LoadingState, ErrorState } from '../../components/feedback/States'
 import { LinkButton, Button } from '../../components/buttons/Button'
-import { fetchOrder, type RealOrder, type RealOrderStatus } from '../../api/realOrder'
+import { Modal } from '../../components/layout/Modal'
+import { Input } from '../../components/forms/Input'
+import { fetchOrder, cancelOrder, type RealOrder, type RealOrderStatus } from '../../api/realOrder'
+import { fetchPaymentByOrder, type PaymentResponse } from '../../api/payments'
 import { addToCart } from '../../api/cart'
 import { useCartStore } from '../../state/cartStore'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
+import { toast } from '../../state/toastStore'
+
+const PAYMENT_STATUS_COPY: Record<PaymentResponse['status'], string> = {
+  INITIATED: 'Payment initiated',
+  PROCESSING: 'Payment processing',
+  SUCCESS: 'Paid',
+  FAILED: 'Payment failed',
+  REFUNDED: 'Fully refunded',
+  PARTIALLY_REFUNDED: 'Partially refunded',
+}
 
 const STATUS_ORDER: RealOrderStatus[] = [
   'PLACED',
@@ -35,7 +48,11 @@ const STATUS_COPY: Record<RealOrderStatus, { headline: string; subtitle: string 
 export function OrderDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const [order, setOrder] = useState<RealOrder | null | undefined>(undefined)
+  const [payment, setPayment] = useState<PaymentResponse | null>(null)
   const [reordering, setReordering] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelBusy, setCancelBusy] = useState(false)
   const reducedMotion = useReducedMotion()
   const navigate = useNavigate()
 
@@ -44,7 +61,29 @@ export function OrderDetailsPage() {
     fetchOrder(id)
       .then(setOrder)
       .catch(() => setOrder(null))
+    fetchPaymentByOrder(id)
+      .then(setPayment)
+      .catch(() => setPayment(null))
   }, [id])
+
+  async function handleCancelOrder() {
+    if (!order) return
+    setCancelBusy(true)
+    try {
+      const updated = await cancelOrder(order.id, cancelReason || undefined)
+      setOrder(updated)
+      setCancelling(false)
+      toast.success('Order cancelled — any payment is being refunded automatically')
+      // The refund happens server-side as part of cancellation; give it a moment then refresh.
+      setTimeout(() => {
+        fetchPaymentByOrder(updated.id).then(setPayment).catch(() => {})
+      }, 1500)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not cancel this order')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
 
   if (order === undefined) {
     return (
@@ -174,6 +213,16 @@ export function OrderDetailsPage() {
                 Get Help
               </a>
             </div>
+
+            {order.status === 'PLACED' || order.status === 'CONFIRMED' ? (
+              <button
+                type="button"
+                onClick={() => setCancelling(true)}
+                className="self-start text-sm font-semibold text-chili-red hover:underline"
+              >
+                Cancel this order
+              </button>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-6">
@@ -195,9 +244,67 @@ export function OrderDetailsPage() {
                 )}
               </div>
             </div>
+
+            {payment && (
+              <div className="rounded-3xl bg-white p-6 ring-1 ring-deep-ink/5">
+                <p className="font-display text-lg uppercase">Payment</p>
+                <div className="mt-4 flex flex-col gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-ink">Status</span>
+                    <span className="font-semibold">{PAYMENT_STATUS_COPY[payment.status]}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-ink">Amount paid</span>
+                    <span className="font-semibold">₹{payment.amount}</span>
+                  </div>
+                  {payment.refundedAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-ink">Refunded</span>
+                      <span className="font-semibold text-herb-green">₹{payment.refundedAmount}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {cancelling && (
+        <Modal title="Cancel this order?" onClose={() => setCancelling(false)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-ink">
+              This can't be undone.
+              {payment && (payment.status === 'SUCCESS' || payment.status === 'PARTIALLY_REFUNDED')
+                ? ` You'll be refunded ₹${(payment.amount - payment.refundedAmount).toFixed(2)} automatically.`
+                : ''}{' '}
+              Let us know why (optional).
+            </p>
+            <Input
+              placeholder="Reason (optional)"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setCancelling(false)}
+                className="text-sm font-semibold text-muted-ink hover:underline"
+              >
+                Keep order
+              </button>
+              <Button
+                type="button"
+                onClick={handleCancelOrder}
+                disabled={cancelBusy}
+                className="!bg-chili-red hover:!bg-chili-red/90"
+              >
+                {cancelBusy ? 'Cancelling...' : 'Cancel order'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </PageShell>
   )
 }
