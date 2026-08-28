@@ -14,13 +14,18 @@ public record PaymentResponse(
         String status,
         BigDecimal refundedAmount,
         String providerReference,
+        String clientSecret,
         Instant createdAt,
         Instant updatedAt
 ) {
     public static PaymentResponse from(Payment payment) {
+        return from(payment, null);
+    }
+
+    public static PaymentResponse from(Payment payment, String clientSecret) {
         return new PaymentResponse(
                 payment.getId(), payment.getOrderId(), payment.getUserId(), payment.getAmount(),
-                payment.getStatus().name(), payment.getRefundedAmount(), payment.getProviderReference(),
+                payment.getStatus().name(), payment.getRefundedAmount(), payment.getProviderReference(), clientSecret,
                 payment.getCreatedAt(), payment.getUpdatedAt()
         );
     }

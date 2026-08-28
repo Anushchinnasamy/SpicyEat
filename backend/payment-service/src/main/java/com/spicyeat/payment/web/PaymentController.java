@@ -5,13 +5,20 @@ import com.spicyeat.common.security.CurrentUser;
 import com.spicyeat.common.security.Role;
 import com.spicyeat.payment.domain.Payment;
 import com.spicyeat.payment.domain.PaymentStatus;
+import com.spicyeat.payment.provider.StripeProperties;
 import com.spicyeat.payment.service.PaymentService;
 import com.spicyeat.payment.web.dto.CreatePaymentRequest;
 import com.spicyeat.payment.web.dto.PaymentResponse;
 import com.spicyeat.payment.web.dto.RefundRequest;
-import com.spicyeat.payment.web.dto.WebhookRequest;
+import com.stripe.exception.SignatureVerificationException;
+import com.stripe.model.Event;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.StripeObject;
+import com.stripe.net.Webhook;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,10 +29,14 @@ import java.util.UUID;
 @RequestMapping("/api/payments")
 public class PaymentController {
 
-    private final PaymentService paymentService;
+    private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
 
-    public PaymentController(PaymentService paymentService) {
+    private final PaymentService paymentService;
+    private final StripeProperties stripeProperties;
+
+    public PaymentController(PaymentService paymentService, StripeProperties stripeProperties) {
         this.paymentService = paymentService;
+        this.stripeProperties = stripeProperties;
     }
 
     @PostMapping
@@ -38,8 +49,10 @@ public class PaymentController {
         if (idempotencyKey.isBlank()) {
             throw ApiException.badRequest("Idempotency-Key header is required");
         }
-        Payment payment = paymentService.createPayment(userId, body.orderId(), body.amount(), idempotencyKey);
-        return ResponseEntity.status(HttpStatus.CREATED).body(PaymentResponse.from(payment));
+        PaymentService.PaymentCreationResult result =
+                paymentService.createPayment(userId, body.orderId(), body.amount(), idempotencyKey);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(PaymentResponse.from(result.payment(), result.clientSecret()));
     }
 
     @GetMapping("/{id}")
@@ -60,16 +73,40 @@ public class PaymentController {
         return PaymentResponse.from(paymentService.refund(id, body.amount(), body.reason()));
     }
 
-    /** Simulated payment-provider webhook; not exposed through the gateway's normal customer routes. */
+    /** Stripe webhook; a public gateway route, so the signature is the only trust boundary. */
     @PostMapping("/webhook")
-    public ResponseEntity<Void> webhook(@Valid @RequestBody WebhookRequest body) {
-        PaymentStatus status;
+    public ResponseEntity<Void> webhook(
+            @RequestBody String payload,
+            @RequestHeader("Stripe-Signature") String signatureHeader
+    ) {
+        Event event;
         try {
-            status = PaymentStatus.valueOf(body.status());
-        } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("Unknown status: " + body.status());
+            event = Webhook.constructEvent(payload, signatureHeader, stripeProperties.getWebhookSecret());
+        } catch (SignatureVerificationException e) {
+            throw ApiException.badRequest("Invalid Stripe webhook signature");
         }
-        paymentService.handleWebhook(body.eventId(), body.paymentId(), status, body.providerReference());
+
+        StripeObject dataObject = event.getDataObjectDeserializer().getObject().orElse(null);
+        if (!(dataObject instanceof PaymentIntent intent)) {
+            return ResponseEntity.ok().build(); // event type we don't care about
+        }
+
+        String paymentIdRaw = intent.getMetadata().get("paymentId");
+        if (paymentIdRaw == null) {
+            log.warn("Stripe event {} for PaymentIntent {} has no paymentId metadata; ignoring", event.getId(), intent.getId());
+            return ResponseEntity.ok().build();
+        }
+
+        PaymentStatus status = switch (event.getType()) {
+            case "payment_intent.succeeded" -> PaymentStatus.SUCCESS;
+            case "payment_intent.payment_failed", "payment_intent.canceled" -> PaymentStatus.FAILED;
+            default -> null;
+        };
+        if (status == null) {
+            return ResponseEntity.ok().build(); // e.g. payment_intent.created, .processing - not a terminal outcome
+        }
+
+        paymentService.handleWebhook(event.getId(), UUID.fromString(paymentIdRaw), status, intent.getId());
         return ResponseEntity.ok().build();
     }
 }

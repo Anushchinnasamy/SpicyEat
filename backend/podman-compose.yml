@@ -53,7 +53,8 @@ services:
 
   auth-service:
     build:
-      context: ./auth-service
+      context: .
+      dockerfile: auth-service/Containerfile
     container_name: spicyeat-auth-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_auth
@@ -70,7 +71,8 @@ services:
 
   user-service:
     build:
-      context: ./user-service
+      context: .
+      dockerfile: user-service/Containerfile
     container_name: spicyeat-user-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_user
@@ -84,7 +86,8 @@ services:
 
   menu-service:
     build:
-      context: ./menu-service
+      context: .
+      dockerfile: menu-service/Containerfile
     container_name: spicyeat-menu-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_menu
@@ -102,7 +105,8 @@ services:
 
   cart-service:
     build:
-      context: ./cart-service
+      context: .
+      dockerfile: cart-service/Containerfile
     container_name: spicyeat-cart-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_cart
@@ -119,7 +123,8 @@ services:
 
   order-service:
     build:
-      context: ./order-service
+      context: .
+      dockerfile: order-service/Containerfile
     container_name: spicyeat-order-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_order
@@ -145,13 +150,18 @@ services:
 
   payment-service:
     build:
-      context: ./payment-service
+      context: .
+      dockerfile: payment-service/Containerfile
     container_name: spicyeat-payment-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_payment
       DB_USERNAME: spicyeat
       DB_PASSWORD: spicyeat
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CURRENCY: ${STRIPE_CURRENCY:-inr}
     ports:
       - "8086:8086"
     depends_on:
@@ -162,7 +172,8 @@ services:
 
   delivery-service:
     build:
-      context: ./delivery-service
+      context: .
+      dockerfile: delivery-service/Containerfile
     container_name: spicyeat-delivery-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_delivery
@@ -182,7 +193,8 @@ services:
 
   notification-service:
     build:
-      context: ./notification-service
+      context: .
+      dockerfile: notification-service/Containerfile
     container_name: spicyeat-notification-service
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/spicyeat_notification
@@ -204,7 +216,8 @@ services:
 
   api-gateway:
     build:
-      context: ./api-gateway
+      context: .
+      dockerfile: api-gateway/Containerfile
     container_name: spicyeat-api-gateway
     environment:
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-please-32bytes+}

@@ -4,22 +4,17 @@ import { PageShell } from '../../components/layout/PageShell'
 import { EditorialHeading } from '../../components/typography/EditorialHeading'
 import { LinkButton } from '../../components/buttons/Button'
 import { LoadingState, ErrorState } from '../../components/feedback/States'
-import { fetchOrder } from '../../api/orders'
-import type { Order, PaymentMethod } from '../../types'
-
-const PAYMENT_LABELS: Record<PaymentMethod, string> = {
-  card: 'Card',
-  upi: 'UPI',
-  cod: 'Cash on delivery',
-}
+import { fetchOrder, type RealOrder } from '../../api/realOrder'
 
 export function OrderConfirmedPage() {
   const { id } = useParams<{ id: string }>()
-  const [order, setOrder] = useState<Order | null | undefined>(undefined)
+  const [order, setOrder] = useState<RealOrder | null | undefined>(undefined)
 
   useEffect(() => {
     if (!id) return
-    fetchOrder(id).then((res) => setOrder(res.data))
+    fetchOrder(id)
+      .then(setOrder)
+      .catch(() => setOrder(null))
   }, [id])
 
   if (order === undefined) {
@@ -62,18 +57,18 @@ export function OrderConfirmedPage() {
               <p className="font-display text-lg">{order.id}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-ink">ETA</p>
-              <p className="font-display text-lg text-sun-orange">{order.etaMinutes} mins</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-ink">Status</p>
+              <p className="font-display text-lg text-sun-orange">{order.status}</p>
             </div>
           </div>
 
           <ul className="mt-4 flex flex-col gap-2 border-b border-deep-ink/10 pb-4 text-sm">
             {order.items.map((item) => (
-              <li key={item.lineId} className="flex justify-between gap-2 text-muted-ink">
+              <li key={item.id} className="flex justify-between gap-2 text-muted-ink">
                 <span className="truncate">
-                  {item.quantity}× {item.name}
+                  {item.quantity}× {item.itemName}
                 </span>
-                <span className="shrink-0 text-deep-ink">₹{item.unitPrice * item.quantity}</span>
+                <span className="shrink-0 text-deep-ink">₹{item.lineTotal}</span>
               </li>
             ))}
           </ul>
@@ -99,17 +94,12 @@ export function OrderConfirmedPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-ink">Payment</p>
-              <p className="mt-1">{PAYMENT_LABELS[order.paymentMethod]}</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-ink">Deliver to</p>
-              <p className="mt-1">
-                {order.address.name} · {order.address.line1}, {order.address.city} {order.address.pincode}
-              </p>
-            </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-ink">Deliver to</p>
+            <p className="mt-1 text-sm">
+              {order.deliveryAddress.label} · {order.deliveryAddress.line1}, {order.deliveryAddress.city}{' '}
+              {order.deliveryAddress.postalCode}
+            </p>
           </div>
         </div>
 

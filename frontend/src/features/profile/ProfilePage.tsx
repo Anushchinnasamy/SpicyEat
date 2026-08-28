@@ -5,6 +5,7 @@ import { EditorialHeading } from '../../components/typography/EditorialHeading'
 import { EmptyState } from '../../components/feedback/States'
 import { LinkButton } from '../../components/buttons/Button'
 import { useAuthStore } from '../../state/authStore'
+import { performLogout } from '../../api/auth'
 import { fetchOrders } from '../../api/orders'
 import { fetchRewardsSummary, type RewardsSummary } from '../../api/rewards'
 import { fetchBestsellers } from '../../api/menu'
@@ -12,7 +13,6 @@ import type { Food, Order } from '../../types'
 
 export function ProfilePage() {
   const user = useAuthStore((s) => s.user)
-  const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
 
   const [orders, setOrders] = useState<Order[]>([])
@@ -57,8 +57,8 @@ export function ProfilePage() {
     )
   }
 
-  function handleLogout() {
-    logout()
+  async function handleLogout() {
+    await performLogout()
     navigate('/')
   }
 
@@ -165,7 +165,7 @@ export function ProfilePage() {
                   <span className="text-xs text-muted-ink">Default</span>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl border border-deep-ink/10 p-4 text-sm">
-                  <span>📲 UPI · foodie@upi</span>
+                  <span>📱 UPI · foodie@upi</span>
                 </div>
               </div>
               <button type="button" className="mt-4 text-sm font-semibold text-sun-orange hover:underline">

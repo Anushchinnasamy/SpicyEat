@@ -15,6 +15,7 @@ import { RewardsPage } from '../../features/rewards/RewardsPage'
 import { ProfilePage } from '../../features/profile/ProfilePage'
 import { LoginPage } from '../../features/auth/LoginPage'
 import { RegisterPage } from '../../features/auth/RegisterPage'
+import { ResetPasswordPage } from '../../features/auth/ResetPasswordPage'
 import { ComingSoonPage } from '../../features/ComingSoonPage'
 import { RequireAdmin } from '../../features/admin/RequireAdmin'
 import { AdminLoginPage } from '../../features/admin/AdminLoginPage'
@@ -43,6 +44,7 @@ export function AppRouter() {
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/explore" element={<ExplorePage />} />
       <Route path="/menu" element={<MenuPage />} />
       <Route path="/menu/:slug" element={<MenuItemPage />} />

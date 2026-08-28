@@ -1,46 +1,54 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageShell } from '../../components/layout/PageShell'
 import { EditorialHeading } from '../../components/typography/EditorialHeading'
-import { EmptyState } from '../../components/feedback/States'
+import { EmptyState, LoadingState } from '../../components/feedback/States'
 import { LinkButton, Button } from '../../components/buttons/Button'
 import { Input } from '../../components/forms/Input'
-import { OptionCard } from '../../components/checkout/OptionCard'
 import { OrderSummary } from '../../components/cart/OrderSummary'
 import { useCartStore, cartSubtotal } from '../../state/cartStore'
-import { placeOrder } from '../../api/orders'
-import type { DeliveryOption, PaymentMethod } from '../../types'
+import { fetchAddresses, createAddress, type AddressResponse } from '../../api/addresses'
+import { placeOrder } from '../../api/realOrder'
+import { createPayment } from '../../api/payments'
+import { PaymentStep } from './PaymentStep'
 
-const DELIVERY_FEES: Record<DeliveryOption, number> = { standard: 40, express: 79 }
-
-const COUPONS: Record<string, { label: string; compute: (subtotal: number, deliveryFee: number) => number }> = {
-  SPICY40: { label: '40% off, up to ₹150', compute: (subtotal) => Math.min(Math.round(subtotal * 0.4), 150) },
-  FREESHIP: { label: 'Free delivery', compute: (_subtotal, deliveryFee) => deliveryFee },
+interface PendingPayment {
+  orderId: string
+  paymentId: string
+  clientSecret: string
+  amount: number
 }
 
 export function CheckoutPage() {
   const items = useCartStore((s) => s.items)
-  const clearCart = useCartStore((s) => s.clear)
+  const clear = useCartStore((s) => s.clear)
   const navigate = useNavigate()
 
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+  const [addresses, setAddresses] = useState<AddressResponse[] | null>(null)
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const [showNewAddress, setShowNewAddress] = useState(false)
+  const [label, setLabel] = useState('Home')
   const [line1, setLine1] = useState('')
   const [city, setCity] = useState('')
-  const [pincode, setPincode] = useState('')
-  const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>('standard')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card')
-  const [couponInput, setCouponInput] = useState('')
-  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
-  const [couponError, setCouponError] = useState<string | null>(null)
-  const [instructions, setInstructions] = useState('')
+  const [state, setState] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [savingAddress, setSavingAddress] = useState(false)
   const [placing, setPlacing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null)
 
   const subtotal = cartSubtotal(items)
-  const deliveryFee = DELIVERY_FEES[deliveryOption]
-  const discount = appliedCoupon ? COUPONS[appliedCoupon].compute(subtotal, deliveryFee) : 0
 
-  if (items.length === 0) {
+  useEffect(() => {
+    fetchAddresses().then((list) => {
+      setAddresses(list)
+      const preferred = list.find((a) => a.isDefault) ?? list[0]
+      setSelectedAddressId(preferred?.id ?? null)
+      setShowNewAddress(list.length === 0)
+    })
+  }, [])
+
+  if (items.length === 0 && !pendingPayment) {
     return (
       <PageShell>
         <EmptyState
@@ -56,32 +64,70 @@ export function CheckoutPage() {
     )
   }
 
-  function applyCoupon() {
-    const code = couponInput.trim().toUpperCase()
-    if (!code) return
-    if (COUPONS[code]) {
-      setAppliedCoupon(code)
-      setCouponError(null)
-    } else {
-      setAppliedCoupon(null)
-      setCouponError('That code isn’t valid. Try again.')
+  if (pendingPayment) {
+    return (
+      <PageShell hideFooter>
+        <div className="mx-auto max-w-lg px-5 pb-32 pt-12 lg:px-10">
+          <EditorialHeading lines={['Pay for your order.']} size="lg" />
+          <div className="mt-10 rounded-2xl bg-white p-6 ring-1 ring-deep-ink/5">
+            <PaymentStep
+              clientSecret={pendingPayment.clientSecret}
+              paymentId={pendingPayment.paymentId}
+              amount={pendingPayment.amount}
+              onSuccess={handlePaymentSuccess}
+            />
+          </div>
+        </div>
+      </PageShell>
+    )
+  }
+
+  async function handleSaveAddress(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingAddress(true)
+    setError(null)
+    try {
+      const created = await createAddress({
+        label,
+        line1,
+        city,
+        state,
+        postalCode,
+        isDefault: (addresses?.length ?? 0) === 0,
+      })
+      setAddresses((prev) => [...(prev ?? []), created])
+      setSelectedAddressId(created.id)
+      setShowNewAddress(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that address. Try again.')
+    } finally {
+      setSavingAddress(false)
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!selectedAddressId) return
     setPlacing(true)
-    const res = await placeOrder({
-      items,
-      address: { name, phone, line1, city, pincode },
-      deliveryOption,
-      paymentMethod,
-      couponCode: appliedCoupon ?? undefined,
-      specialInstructions: instructions || undefined,
-      discount,
-    })
-    clearCart()
-    navigate(`/order-confirmed/${res.data.id}`)
+    setError(null)
+    try {
+      const order = await placeOrder(selectedAddressId)
+      const payment = await createPayment(order.id, order.total)
+      if (!payment.clientSecret) {
+        throw new Error('Payment could not be started. Please try again.')
+      }
+      setPendingPayment({ orderId: order.id, paymentId: payment.id, clientSecret: payment.clientSecret, amount: order.total })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something got a little too hot. Try again.')
+    } finally {
+      setPlacing(false)
+    }
+  }
+
+  async function handlePaymentSuccess() {
+    if (!pendingPayment) return
+    await clear()
+    navigate(`/order-confirmed/${pendingPayment.orderId}`)
   }
 
   return (
@@ -93,113 +139,80 @@ export function CheckoutPage() {
           <div className="flex flex-col gap-8">
             <section>
               <p className="font-display text-xl uppercase">Delivery Address</p>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <Input icon="👤" required placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
-                <Input
-                  icon="📱"
-                  required
-                  type="tel"
-                  placeholder="Phone number"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-                <Input
-                  icon="📍"
-                  required
-                  placeholder="Address, area"
-                  className="sm:col-span-2"
-                  value={line1}
-                  onChange={(e) => setLine1(e.target.value)}
-                />
-                <Input icon="🏙️" required placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
-                <Input
-                  icon="🔢"
-                  required
-                  placeholder="Pincode"
-                  value={pincode}
-                  onChange={(e) => setPincode(e.target.value)}
-                />
-              </div>
-            </section>
 
-            <section>
-              <p className="font-display text-xl uppercase">Delivery Option</p>
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                <OptionCard
-                  icon="🛵"
-                  title="Standard"
-                  subtitle="35-45 min · ₹40"
-                  selected={deliveryOption === 'standard'}
-                  onSelect={() => setDeliveryOption('standard')}
-                />
-                <OptionCard
-                  icon="⚡"
-                  title="Express"
-                  subtitle="15-25 min · ₹79"
-                  selected={deliveryOption === 'express'}
-                  onSelect={() => setDeliveryOption('express')}
-                />
-              </div>
-            </section>
+              {addresses === null && <LoadingState />}
 
-            <section>
-              <p className="font-display text-xl uppercase">Payment</p>
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                <OptionCard
-                  icon="💳"
-                  title="Card"
-                  subtitle="Credit or debit"
-                  selected={paymentMethod === 'card'}
-                  onSelect={() => setPaymentMethod('card')}
-                />
-                <OptionCard
-                  icon="📲"
-                  title="UPI"
-                  subtitle="Pay by any app"
-                  selected={paymentMethod === 'upi'}
-                  onSelect={() => setPaymentMethod('upi')}
-                />
-                <OptionCard
-                  icon="💵"
-                  title="Cash"
-                  subtitle="Pay on delivery"
-                  selected={paymentMethod === 'cod'}
-                  onSelect={() => setPaymentMethod('cod')}
-                />
-              </div>
-            </section>
-
-            <section>
-              <p className="font-display text-xl uppercase">Coupon</p>
-              <div className="mt-4 flex gap-3">
-                <Input
-                  icon="🎟️"
-                  placeholder="Enter code, e.g. SPICY40"
-                  value={couponInput}
-                  onChange={(e) => setCouponInput(e.target.value)}
-                  className="uppercase"
-                />
-                <Button type="button" variant="outline" onClick={applyCoupon}>
-                  Apply
-                </Button>
-              </div>
-              {appliedCoupon && (
-                <p className="mt-2 text-sm font-semibold text-herb-green">
-                  {appliedCoupon} applied — {COUPONS[appliedCoupon].label}
-                </p>
+              {addresses !== null && addresses.length > 0 && !showNewAddress && (
+                <div className="mt-4 flex flex-col gap-3">
+                  {addresses.map((a) => (
+                    <label
+                      key={a.id}
+                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3.5 text-sm transition-colors ${
+                        selectedAddressId === a.id ? 'border-sun-orange bg-sun-orange/10' : 'border-deep-ink/15'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="address"
+                        className="mt-1 accent-sun-orange"
+                        checked={selectedAddressId === a.id}
+                        onChange={() => setSelectedAddressId(a.id)}
+                      />
+                      <span>
+                        <span className="block font-semibold">{a.label}</span>
+                        <span className="block text-muted-ink">
+                          {a.line1}
+                          {a.line2 ? `, ${a.line2}` : ''}, {a.city}, {a.state} {a.postalCode}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAddress(true)}
+                    className="self-start text-sm font-semibold text-sun-orange hover:underline"
+                  >
+                    + Add a new address
+                  </button>
+                </div>
               )}
-              {couponError && <p className="mt-2 text-sm text-chili-red">{couponError}</p>}
-            </section>
 
-            <section>
-              <p className="font-display text-xl uppercase">Special Instructions</p>
-              <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="Extra napkins, no onions, leave at the door..."
-                rows={3}
-                className="mt-4 w-full rounded-2xl border border-deep-ink/15 bg-white/60 px-4 py-3.5 text-sm outline-none placeholder:text-muted-ink/60 focus-within:border-sun-orange"
-              />
+              {addresses !== null && showNewAddress && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Input icon="🏷️" required placeholder="Label, e.g. Home" value={label} onChange={(e) => setLabel(e.target.value)} />
+                  <Input
+                    icon="📍"
+                    required
+                    placeholder="Address, area"
+                    className="sm:col-span-2"
+                    value={line1}
+                    onChange={(e) => setLine1(e.target.value)}
+                  />
+                  <Input icon="🏙️" required placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+                  <Input icon="🗺️" required placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
+                  <Input
+                    icon="🔢"
+                    required
+                    placeholder="Postal code"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                  />
+                  <div className="flex items-center gap-3 sm:col-span-2">
+                    <Button type="button" onClick={handleSaveAddress} disabled={savingAddress}>
+                      {savingAddress ? 'Saving...' : 'Save Address'}
+                    </Button>
+                    {addresses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewAddress(false)}
+                        className="text-sm font-semibold text-muted-ink hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </section>
           </div>
 
@@ -220,13 +233,15 @@ export function CheckoutPage() {
               </ul>
             </div>
 
-            <OrderSummary subtotal={subtotal} deliveryFee={deliveryFee} discount={discount} />
+            <OrderSummary subtotal={subtotal} deliveryFee={0} discount={0} />
 
-            <Button type="submit" disabled={placing} className="w-full justify-center">
+            {error && <p className="text-sm text-chili-red">{error}</p>}
+
+            <Button type="submit" disabled={placing || !selectedAddressId} className="w-full justify-center">
               {placing ? 'Cooking something good...' : 'Place Order'}
               {!placing && <span aria-hidden>→</span>}
             </Button>
-            <p className="text-center text-xs text-muted-ink">Secure payment. Zero drama.</p>
+            <p className="text-center text-xs text-muted-ink">Payment happens after the order is placed.</p>
           </div>
         </div>
       </form>

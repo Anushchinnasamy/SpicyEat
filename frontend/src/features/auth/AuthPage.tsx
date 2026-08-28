@@ -6,7 +6,7 @@ import { EditorialHeading } from '../../components/typography/EditorialHeading'
 import { LoginEntryAnimation } from '../../components/animations/LoginEntryAnimation'
 import { useAuth } from './useAuth'
 
-type Tab = 'login' | 'register'
+type Tab = 'login' | 'register' | 'forgot-password'
 
 const perks = [
   { icon: '🔥', title: 'Real Heat', desc: 'No compromises. Just fire.' },
@@ -64,14 +64,28 @@ export function AuthPage({ initialTab = 'login' }: { initialTab?: Tab }) {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showEntry, setShowEntry] = useState(false)
-  const { login, register, loading, error } = useAuth()
+  const [forgotSuccess, setForgotSuccess] = useState(false)
+  const { login, register, requestReset, loading, error, setErrorEmpty } = useAuth()
   const navigate = useNavigate()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const ok =
-      tab === 'login' ? await login({ email, password }) : await register({ name, email, password })
-    if (ok) setShowEntry(true)
+    
+    if (tab === 'forgot-password') {
+      const ok = await requestReset({ email })
+      if (ok) {
+        setForgotSuccess(true)
+      }
+    } else {
+      const ok = tab === 'login' ? await login({ email, password }) : await register({ name, email, password })
+      if (ok) setShowEntry(true)
+    }
+  }
+
+  function handleSwitchTab(t: Tab) {
+    setTab(t)
+    setForgotSuccess(false)
+    setErrorEmpty()
   }
 
   return (
@@ -124,16 +138,18 @@ export function AuthPage({ initialTab = 'login' }: { initialTab?: Tab }) {
           <EditorialHeading
             as="h1"
             size="md"
-            lines={[tab === 'login' ? 'Welcome' : "Let's get", tab === 'login' ? 'Back' : 'you fed.']}
+            lines={
+              tab === 'login'
+                ? ['Welcome', 'Back']
+                : tab === 'register'
+                  ? ["Let's get", 'you fed.']
+                  : ['Reset', 'password']
+            }
           />
           <p className="mt-3 text-sm text-muted-ink">
-            {tab === 'login' ? (
-              <>
-                Login to continue your <span className="text-sun-orange">spicy</span> journey.
-              </>
-            ) : (
-              'Create an account and start craving.'
-            )}
+            {tab === 'login' && <>Login to continue your <span className="text-sun-orange">spicy</span> journey.</>}
+            {tab === 'register' && 'Create an account and start craving.'}
+            {tab === 'forgot-password' && 'Enter your email to receive a password reset link.'}
           </p>
 
           <div className="mt-8 flex gap-6 border-b border-deep-ink/10">
@@ -141,9 +157,9 @@ export function AuthPage({ initialTab = 'login' }: { initialTab?: Tab }) {
               <button
                 key={t}
                 type="button"
-                onClick={() => setTab(t)}
+                onClick={() => handleSwitchTab(t)}
                 className={`-mb-px border-b-2 pb-3 text-sm font-bold uppercase tracking-wide transition-colors ${
-                  tab === t ? 'border-sun-orange text-deep-ink' : 'border-transparent text-muted-ink'
+                  tab === t || (tab === 'forgot-password' && t === 'login') ? 'border-sun-orange text-deep-ink' : 'border-transparent text-muted-ink'
                 }`}
               >
                 {t}
@@ -151,91 +167,118 @@ export function AuthPage({ initialTab = 'login' }: { initialTab?: Tab }) {
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
-            {tab === 'register' && (
+          {!forgotSuccess ? (
+            <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
+              {tab === 'register' && (
+                <Input
+                  icon="👤"
+                  type="text"
+                  required
+                  placeholder="Full name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              )}
               <Input
-                icon="👤"
-                type="text"
+                icon="✉️"
+                type="email"
                 required
-                placeholder="Full name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                placeholder="Email or phone number"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
-            )}
-            <Input
-              icon="✉️"
-              type="email"
-              required
-              placeholder="Email or phone number"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <Input
-              icon="🔒"
-              type={showPassword ? 'text' : 'password'}
-              required
-              minLength={6}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              endAdornment={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="shrink-0 text-muted-ink transition-colors hover:text-deep-ink"
+              
+              {tab !== 'forgot-password' && (
+                <Input
+                  icon="🔒"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={8}
+                  maxLength={100}
+                  placeholder="Password (min 8 chars)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  endAdornment={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="shrink-0 text-muted-ink transition-colors hover:text-deep-ink"
+                    >
+                      <EyeIcon off={showPassword} />
+                    </button>
+                  }
+                />
+              )}
+
+              {tab === 'login' && (
+                <button 
+                  type="button" 
+                  onClick={() => handleSwitchTab('forgot-password')}
+                  className="self-end text-xs font-semibold text-sun-orange hover:underline"
                 >
-                  <EyeIcon off={showPassword} />
+                  Forgot password?
                 </button>
-              }
-            />
+              )}
 
-            {tab === 'login' && (
-              <button type="button" className="self-end text-xs font-semibold text-sun-orange hover:underline">
-                Forgot password?
+              {error && <p className="text-sm text-chili-red">{error}</p>}
+
+              <Button type="submit" disabled={loading} className="mt-2 w-full justify-center">
+                {loading ? 'Cooking something good...' : tab === 'login' ? 'Login' : tab === 'register' ? 'Create Account' : 'Send Reset Link'}
+                {!loading && <span aria-hidden>→</span>}
+              </Button>
+            </form>
+          ) : (
+            <div className="mt-8 rounded-2xl bg-herb-green/10 p-6 text-center text-sm text-deep-ink">
+              <span className="mb-2 block text-2xl">✅</span>
+              <p className="font-semibold">Reset link sent!</p>
+              <p className="mt-1 text-muted-ink">If an account exists for {email}, a reset link has been dispatched to it.</p>
+              <button 
+                type="button" 
+                onClick={() => handleSwitchTab('login')} 
+                className="mt-6 font-semibold text-sun-orange hover:underline"
+              >
+                Back to Login
               </button>
-            )}
+            </div>
+          )}
 
-            {error && <p className="text-sm text-chili-red">{error}</p>}
+          {tab !== 'forgot-password' && (
+            <>
+              <div className="mt-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-muted-ink">
+                <span className="h-px flex-1 bg-deep-ink/10" />
+                or continue with
+                <span className="h-px flex-1 bg-deep-ink/10" />
+              </div>
 
-            <Button type="submit" disabled={loading} className="mt-2 w-full justify-center">
-              {loading ? 'Cooking something good...' : tab === 'login' ? 'Login' : 'Create Account'}
-              {!loading && <span aria-hidden>→</span>}
-            </Button>
-          </form>
+              <div className="mt-4 flex gap-3">
+                <SocialButton label="Google">
+                  <GoogleIcon />
+                </SocialButton>
+                <SocialButton label="Apple">
+                  <span aria-hidden className="text-base"></span>
+                </SocialButton>
+              </div>
 
-          <div className="mt-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-muted-ink">
-            <span className="h-px flex-1 bg-deep-ink/10" />
-            or continue with
-            <span className="h-px flex-1 bg-deep-ink/10" />
-          </div>
-
-          <div className="mt-4 flex gap-3">
-            <SocialButton label="Google">
-              <GoogleIcon />
-            </SocialButton>
-            <SocialButton label="Apple">
-              <span aria-hidden className="text-base"></span>
-            </SocialButton>
-          </div>
-
-          <p className="mt-8 text-center text-xs text-muted-ink">
-            {tab === 'login' ? (
-              <>
-                New here?{' '}
-                <button className="font-semibold text-sun-orange hover:underline" onClick={() => setTab('register')}>
-                  Create an account →
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{' '}
-                <button className="font-semibold text-sun-orange hover:underline" onClick={() => setTab('login')}>
-                  Login →
-                </button>
-              </>
-            )}
-          </p>
+              <p className="mt-8 text-center text-xs text-muted-ink">
+                {tab === 'login' ? (
+                  <>
+                    New here?{' '}
+                    <button className="font-semibold text-sun-orange hover:underline" onClick={() => handleSwitchTab('register')}>
+                      Create an account →
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{' '}
+                    <button className="font-semibold text-sun-orange hover:underline" onClick={() => handleSwitchTab('login')}>
+                      Login →
+                    </button>
+                  </>
+                )}
+              </p>
+            </>
+          )}
         </div>
       </div>
 

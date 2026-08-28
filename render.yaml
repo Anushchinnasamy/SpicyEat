@@ -200,6 +200,14 @@ services:
         value: PLAIN
       - key: KAFKA_SASL_JAAS_CONFIG
         sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_CURRENCY
+        value: "inr"
 
   - type: web
     name: delivery-service

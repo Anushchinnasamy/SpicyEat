@@ -45,6 +45,8 @@ export function AdminLoginPage() {
             icon="🔒"
             type="password"
             required
+            minLength={8}
+            maxLength={100}
             placeholder="Password"
             label="Password"
             value={password}

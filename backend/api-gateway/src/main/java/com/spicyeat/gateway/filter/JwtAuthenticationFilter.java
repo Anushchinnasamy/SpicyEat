@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.reactive.CorsUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -56,7 +57,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                     headers.remove(USER_ROLES_HEADER);
                 });
 
-        if (isPublic(request)) {
+        if (CorsUtils.isPreFlightRequest(request) || HttpMethod.OPTIONS.equals(request.getMethod()) || isPublic(request)) {
             return chain.filter(exchange.mutate().request(sanitized.build()).build());
         }
 

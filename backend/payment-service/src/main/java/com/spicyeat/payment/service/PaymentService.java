@@ -3,7 +3,7 @@ package com.spicyeat.payment.service;
 import com.spicyeat.common.error.ApiException;
 import com.spicyeat.payment.domain.*;
 import com.spicyeat.payment.outbox.OutboxRecorder;
-import com.spicyeat.payment.provider.MockPaymentProvider;
+import com.spicyeat.payment.provider.StripePaymentProvider;
 import com.spicyeat.payment.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +20,7 @@ public class PaymentService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final RefundRepository refundRepository;
     private final ProcessedWebhookEventRepository processedWebhookEventRepository;
-    private final MockPaymentProvider paymentProvider;
+    private final StripePaymentProvider paymentProvider;
     private final OutboxRecorder outboxRecorder;
 
     public PaymentService(
@@ -29,7 +29,7 @@ public class PaymentService {
             PaymentTransactionRepository paymentTransactionRepository,
             RefundRepository refundRepository,
             ProcessedWebhookEventRepository processedWebhookEventRepository,
-            MockPaymentProvider paymentProvider,
+            StripePaymentProvider paymentProvider,
             OutboxRecorder outboxRecorder
     ) {
         this.paymentRepository = paymentRepository;
@@ -42,23 +42,24 @@ public class PaymentService {
     }
 
     @Transactional
-    public Payment createPayment(UUID userId, UUID orderId, BigDecimal amount, String idempotencyKey) {
+    public PaymentCreationResult createPayment(UUID userId, UUID orderId, BigDecimal amount, String idempotencyKey) {
         var existing = paymentRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
         if (existing.isPresent()) {
             Payment payment = existing.get();
             if (!payment.getOrderId().equals(orderId)) {
                 throw ApiException.conflict("Idempotency key was already used for a different order");
             }
-            return payment; // safe replay: no new charge attempt, no duplicate side effects
+            return new PaymentCreationResult(payment, null); // safe replay: no new charge attempt, no duplicate side effects
         }
 
         Payment payment = paymentRepository.save(new Payment(orderId, userId, amount, idempotencyKey));
-        attemptCharge(payment);
-        return payment;
+        String clientSecret = attemptCharge(payment, idempotencyKey);
+        return new PaymentCreationResult(payment, clientSecret);
     }
 
-    private void attemptCharge(Payment payment) {
-        MockPaymentProvider.ChargeResult result = paymentProvider.charge(payment.getAmount());
+    private String attemptCharge(Payment payment, String idempotencyKey) {
+        StripePaymentProvider.ChargeResult result =
+                paymentProvider.charge(payment.getId(), payment.getOrderId(), payment.getAmount(), idempotencyKey);
         int attemptNumber = paymentAttemptRepository.countByPaymentId(payment.getId()) + 1;
         paymentAttemptRepository.save(new PaymentAttempt(
                 payment.getId(), attemptNumber, result.status(), result.providerReference(), result.failureReason()
@@ -75,6 +76,10 @@ public class PaymentService {
         } else if (result.status() == PaymentStatus.FAILED) {
             onPaymentFailed(payment, result.failureReason());
         }
+        return result.clientSecret();
+    }
+
+    public record PaymentCreationResult(Payment payment, String clientSecret) {
     }
 
     @Transactional(readOnly = true)
@@ -90,7 +95,7 @@ public class PaymentService {
             return payment; // terminal already; verify is a safe no-op
         }
 
-        MockPaymentProvider.ChargeResult result = paymentProvider.verify(payment.getProviderReference(), payment.getStatus());
+        StripePaymentProvider.ChargeResult result = paymentProvider.verify(payment.getProviderReference(), payment.getStatus());
         int attemptNumber = paymentAttemptRepository.countByPaymentId(payment.getId()) + 1;
         paymentAttemptRepository.save(new PaymentAttempt(
                 payment.getId(), attemptNumber, result.status(), result.providerReference(), result.failureReason()
@@ -123,7 +128,7 @@ public class PaymentService {
             throw ApiException.badRequest("Refund amount exceeds the remaining refundable balance of " + remaining);
         }
 
-        MockPaymentProvider.RefundResult result = paymentProvider.refund(amount);
+        StripePaymentProvider.RefundResult result = paymentProvider.refund(payment.getProviderReference(), amount);
         refundRepository.save(new Refund(payment.getId(), amount, reason, result.status()));
         paymentTransactionRepository.save(new PaymentTransaction(
                 payment.getId(), TransactionType.REFUND, amount, result.status(), result.providerReference()

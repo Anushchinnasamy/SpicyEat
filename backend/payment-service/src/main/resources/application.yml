@@ -42,6 +42,11 @@ spring:
 spicyeat:
   kafka:
     payment-topic: ${PAYMENT_EVENTS_TOPIC:spicyeat.payment.events}
+  stripe:
+    secret-key: ${STRIPE_SECRET_KEY:}
+    publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    currency: ${STRIPE_CURRENCY:inr}
 
 management:
   endpoints:

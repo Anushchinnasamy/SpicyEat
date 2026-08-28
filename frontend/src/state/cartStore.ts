@@ -1,5 +1,7 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { addToCart, clearCartOnServer, getCart, removeCartItem, updateCartItem, type CartItemResponse } from '../api/cart'
+import { fetchApi } from '../api/client'
+import { SPICE_LEVEL_FROM_BACKEND, type MenuItemResponse } from '../api/menuMapper'
 import type { AddOn, CartLineItem, Food, SizeOption, SpiceLevel } from '../types'
 
 interface AddToCartInput {
@@ -12,57 +14,80 @@ interface AddToCartInput {
 
 interface CartState {
   items: CartLineItem[]
-  addItem: (input: AddToCartInput) => void
-  addLineItems: (items: CartLineItem[]) => void
-  removeItem: (lineId: string) => void
-  setQuantity: (lineId: string, quantity: number) => void
-  clear: () => void
+  loaded: boolean
+  refresh: () => Promise<void>
+  addItem: (input: AddToCartInput) => Promise<void>
+  removeItem: (lineId: string) => Promise<void>
+  setQuantity: (lineId: string, quantity: number) => Promise<void>
+  clear: () => Promise<void>
 }
 
-export const useCartStore = create<CartState>()(
-  persist(
-    (set, get) => ({
-      items: [],
-      addItem: ({ food, quantity, size, addOns = [], spiceLevel }) => {
-        const unitPrice = food.price + (size?.price ?? 0) + addOns.reduce((sum, a) => sum + a.price, 0)
-        const lineId = `${food.id}-${size?.id ?? 'default'}-${addOns.map((a) => a.id).join('_')}-${Date.now()}`
-        set({
-          items: [
-            ...get().items,
-            {
-              lineId,
-              foodId: food.id,
-              name: food.name,
-              image: food.images[0],
-              unitPrice,
-              quantity,
-              spiceLevel,
-              sizeLabel: size?.label,
-              addOnNames: addOns.map((a) => a.name),
-            },
-          ],
-        })
-      },
-      addLineItems: (items) =>
-        set({
-          items: [
-            ...get().items,
-            ...items.map((item, i) => ({ ...item, lineId: `reorder-${Date.now()}-${i}` })),
-          ],
-        }),
-      removeItem: (lineId) => set({ items: get().items.filter((i) => i.lineId !== lineId) }),
-      setQuantity: (lineId, quantity) =>
-        set({
-          items:
-            quantity <= 0
-              ? get().items.filter((i) => i.lineId !== lineId)
-              : get().items.map((i) => (i.lineId === lineId ? { ...i, quantity } : i)),
-        }),
-      clear: () => set({ items: [] }),
-    }),
-    { name: 'spicyeat-cart' },
-  ),
-)
+// Cart items only carry menuItemId + name server-side; image and spice level
+// are display-only concerns owned by menu-service, so they're looked up here
+// from a full menu fetch rather than duplicated into the cart's own schema.
+let menuCache: Map<string, MenuItemResponse> | null = null
+async function loadMenuCache(): Promise<Map<string, MenuItemResponse>> {
+  if (!menuCache) {
+    const items = await fetchApi<MenuItemResponse[]>('/api/menu')
+    menuCache = new Map(items.map((i) => [i.id, i]))
+  }
+  return menuCache
+}
+
+async function toLineItems(items: CartItemResponse[]): Promise<CartLineItem[]> {
+  const menu = await loadMenuCache()
+  return items.map((item) => {
+    const menuItem = menu.get(item.menuItemId)
+    return {
+      lineId: item.id,
+      foodId: item.menuItemId,
+      name: item.itemName,
+      image: menuItem?.imageUrl ?? '',
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      spiceLevel: (menuItem ? SPICE_LEVEL_FROM_BACKEND[menuItem.spiceLevel] : undefined) ?? 1,
+      addOnNames: item.addons.map((a) => a.name),
+    }
+  })
+}
+
+export const useCartStore = create<CartState>()((set, get) => ({
+  items: [],
+  loaded: false,
+
+  refresh: async () => {
+    const cart = await getCart()
+    set({ items: await toLineItems(cart.items), loaded: true })
+  },
+
+  addItem: async ({ food, quantity, addOns = [] }) => {
+    const cart = await addToCart(
+      food.id,
+      quantity,
+      addOns.map((a) => a.id),
+    )
+    set({ items: await toLineItems(cart.items), loaded: true })
+  },
+
+  removeItem: async (lineId) => {
+    const cart = await removeCartItem(lineId)
+    set({ items: await toLineItems(cart.items), loaded: true })
+  },
+
+  setQuantity: async (lineId, quantity) => {
+    if (quantity <= 0) {
+      await get().removeItem(lineId)
+      return
+    }
+    const cart = await updateCartItem(lineId, quantity)
+    set({ items: await toLineItems(cart.items), loaded: true })
+  },
+
+  clear: async () => {
+    await clearCartOnServer()
+    set({ items: [], loaded: true })
+  },
+}))
 
 export function cartItemCount(items: CartLineItem[]) {
   return items.reduce((sum, i) => sum + i.quantity, 0)

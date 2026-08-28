@@ -1,7 +1,6 @@
 import type { ApiResult, User } from '../types'
 import { useAuthStore } from '../state/authStore'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://api-gateway-19ce.onrender.com'
+import { fetchApi } from './client'
 
 export interface LoginPayload {
   email: string
@@ -12,6 +11,15 @@ export interface RegisterPayload {
   name: string
   email: string
   password: string
+}
+
+export interface ForgotPasswordPayload {
+  email: string
+}
+
+export interface ResetPasswordPayload {
+  token: string
+  newPassword: string
 }
 
 interface AuthResponse {
@@ -33,72 +41,97 @@ interface ProfileResponse {
   phoneNumber: string | null
 }
 
-async function parseErrorMessage(res: Response): Promise<string> {
-  try {
-    const body = await res.json()
-    return body.message ?? `Request failed with status ${res.status}`
-  } catch {
-    return `Request failed with status ${res.status}`
-  }
-}
-
-async function authenticate(path: string, body: unknown): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) throw new Error(await parseErrorMessage(res))
-  return res.json()
-}
-
-async function fetchMe(accessToken: string): Promise<MeResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!res.ok) throw new Error(await parseErrorMessage(res))
-  return res.json()
-}
-
-async function fetchProfile(accessToken: string): Promise<ProfileResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/users/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!res.ok) throw new Error(await parseErrorMessage(res))
-  return res.json()
-}
-
-async function updateProfileName(accessToken: string, fullName: string): Promise<ProfileResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/users/me`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ fullName, phoneNumber: null }),
-  })
-  if (!res.ok) throw new Error(await parseErrorMessage(res))
-  return res.json()
-}
-
 function persistSession(user: User, tokens: AuthResponse) {
   useAuthStore.getState().setSession(user, tokens.accessToken, tokens.refreshToken)
 }
 
+export async function fetchMe(): Promise<MeResponse> {
+  return fetchApi<MeResponse>('/api/auth/me')
+}
+
+export async function fetchProfile(): Promise<ProfileResponse> {
+  return fetchApi<ProfileResponse>('/api/users/me')
+}
+
+export async function updateProfileName(fullName: string): Promise<ProfileResponse> {
+  return fetchApi<ProfileResponse>('/api/users/me', {
+    method: 'PUT',
+    body: JSON.stringify({ fullName, phoneNumber: null }),
+  })
+}
+
 export async function login(payload: LoginPayload): Promise<ApiResult<User>> {
-  const tokens = await authenticate('/api/auth/login', { email: payload.email, password: payload.password })
-  const [me, profile] = await Promise.all([fetchMe(tokens.accessToken), fetchProfile(tokens.accessToken)])
-  const user: User = { id: me.id, name: profile.fullName || me.email.split('@')[0], email: me.email }
-  persistSession(user, tokens)
-  return { data: user }
+  const tokens = await fetchApi<AuthResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: payload.email, password: payload.password }),
+  })
+  
+  // Set tokens temporarily so subsequent calls have the Bearer token attached automatically
+  useAuthStore.getState().setSession({ id: '', name: '', email: '' }, tokens.accessToken, tokens.refreshToken)
+
+  try {
+    const [me, profile] = await Promise.all([fetchMe(), fetchProfile()])
+    const user: User = { id: me.id, name: profile.fullName || me.email.split('@')[0], email: me.email }
+    persistSession(user, tokens)
+    return { data: user }
+  } catch (error) {
+    useAuthStore.getState().logout()
+    throw error
+  }
 }
 
 export async function register(payload: RegisterPayload): Promise<ApiResult<User>> {
-  const tokens = await authenticate('/api/auth/register', {
-    email: payload.email,
-    password: payload.password,
-    role: 'CUSTOMER',
+  const tokens = await fetchApi<AuthResponse>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: payload.email,
+      password: payload.password,
+      role: 'CUSTOMER',
+    }),
   })
-  const me = await fetchMe(tokens.accessToken)
-  const profile = await updateProfileName(tokens.accessToken, payload.name)
-  const user: User = { id: me.id, name: profile.fullName || payload.name, email: me.email }
-  persistSession(user, tokens)
-  return { data: user }
+  
+  // Set tokens temporarily so subsequent calls have the Bearer token
+  useAuthStore.getState().setSession({ id: '', name: '', email: '' }, tokens.accessToken, tokens.refreshToken)
+
+  try {
+    const me = await fetchMe()
+    const profile = await updateProfileName(payload.name)
+    const user: User = { id: me.id, name: profile.fullName || payload.name, email: me.email }
+    persistSession(user, tokens)
+    return { data: user }
+  } catch (error) {
+    useAuthStore.getState().logout()
+    throw error
+  }
+}
+
+export async function requestPasswordReset(payload: ForgotPasswordPayload): Promise<void> {
+  await fetchApi('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function resetPassword(payload: ResetPasswordPayload): Promise<void> {
+  await fetchApi('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function performLogout(): Promise<void> {
+  const { refreshToken, logout } = useAuthStore.getState()
+  if (refreshToken) {
+    try {
+      await fetchApi('/api/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      })
+    } catch (e) {
+      // Intentionally ignore backend logout failure so local state cleans up safely
+      console.error('Failed to revoke session on backend', e)
+    }
+  }
+  // Clear local state
+  logout()
 }
