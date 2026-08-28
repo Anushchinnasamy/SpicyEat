@@ -1,12 +1,4 @@
 services:
-  - type: pserv
-    name: redis
-    runtime: image
-    plan: free
-    region: oregon
-    image:
-      url: docker.io/library/redis:7-alpine
-
   - type: web
     name: api-gateway
     runtime: docker
@@ -23,15 +15,15 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: REDIS_HOST
-        value: redis
+        sync: false
       - key: REDIS_PORT
         value: "6379"
       - key: REDIS_USERNAME
-        value: ""
+        sync: false
       - key: REDIS_PASSWORD
-        value: ""
+        sync: false
       - key: REDIS_SSL
-        value: "false"
+        value: "true"
       - key: AUTH_SERVICE_URI
         value: http://auth-service:8081
       - key: USER_SERVICE_URI
@@ -115,15 +107,15 @@ services:
       - key: DB_SCHEMA
         value: spicyeat_menu
       - key: REDIS_HOST
-        value: redis
+        sync: false
       - key: REDIS_PORT
         value: "6379"
       - key: REDIS_USERNAME
-        value: ""
+        sync: false
       - key: REDIS_PASSWORD
-        value: ""
+        sync: false
       - key: REDIS_SSL
-        value: "false"
+        value: "true"
 
   - type: web
     name: cart-service

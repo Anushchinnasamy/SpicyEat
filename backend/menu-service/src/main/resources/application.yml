@@ -53,6 +53,10 @@ management:
     health:
       show-details: never
 
+  health:
+    redis:
+      enabled: false
+
   metrics:
     tags:
       application: menu-service
